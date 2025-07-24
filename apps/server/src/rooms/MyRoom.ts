@@ -1,6 +1,6 @@
 import { JWT } from "@colyseus/auth";
 import { Room, Client } from "@colyseus/core";
-import { Schema, MapSchema, type } from "@colyseus/schema";
+import { Schema, MapSchema, type, ArraySchema } from "@colyseus/schema";
 
 export class Vec2 extends Schema {
   @type("number") x: number;
@@ -13,8 +13,19 @@ export class Player extends Schema {
   @type(Vec2) position = new Vec2();
 }
 
+// ルーレット用の状態
+export class RouletteState extends Schema {
+  @type(["string"]) items = new ArraySchema<string>();
+  @type("boolean") isSpinning: boolean = false;
+  @type("string") result: string = "";
+}
+
+// export class MyRoomState extends Schema {
+//   @type({ map: Player }) players = new MapSchema<Player>();
+// }
+
 export class MyRoomState extends Schema {
-  @type({ map: Player }) players = new MapSchema<Player>();
+  @type(RouletteState) roulette = new RouletteState();
 }
 
 export class MyRoom extends Room<MyRoomState> {
@@ -26,26 +37,54 @@ export class MyRoom extends Room<MyRoomState> {
   }
 
   onCreate (options: any) {
-    this.onMessage("move", (client, message) => {
-      const player = this.state.players.get(client.sessionId);
-      player.position.x = message.x;
-      player.position.y = message.y;
+    // ルーレット項目追加
+    this.onMessage("add_item", (client, message) => {
+      const item = message.item?.trim();
+      if (item && !this.state.roulette.items.includes(item)) {
+        this.state.roulette.items.push(item);
+      }
+    });
+    // ルーレット項目削除
+    this.onMessage("remove_item", (client, message) => {
+      const item = message.item;
+      const idx = this.state.roulette.items.indexOf(item);
+      if (idx !== -1) {
+        this.state.roulette.items.splice(idx, 1);
+      }
+      // 結果が削除された場合はリセット
+      if (this.state.roulette.result === item) {
+        this.state.roulette.result = "";
+      }
+    });
+    // ルーレット回転
+    this.onMessage("spin", (client, message) => {
+      if (this.state.roulette.isSpinning || this.state.roulette.items.length === 0) return;
+      this.state.roulette.isSpinning = true;
+      // サーバーでランダムに選択
+      const randomIndex = Math.floor(Math.random() * this.state.roulette.items.length);
+      const selectedItem = this.state.roulette.items[randomIndex];
+      // 疑似的な回転時間（例: 2秒後に結果確定）
+      setTimeout(() => {
+        this.state.roulette.result = selectedItem;
+        this.state.roulette.isSpinning = false;
+      }, 2000);
     });
   }
 
   onJoin (client: Client, options: any) {
     console.log(client.sessionId, "joined!");
-    const player = new Player();
-    player.username = client.auth?.username || "Guest";
-    player.heroType = Math.floor(Math.random() * 12) + 1;
-    player.position.x = Math.floor(Math.random() * 100);
-    player.position.y = Math.floor(Math.random() * 100);
-    this.state.players.set(client.sessionId, player);
+    // プレイヤー管理は一旦コメントアウト
+    // const player = new Player();
+    // player.username = client.auth?.username || "Guest";
+    // player.heroType = Math.floor(Math.random() * 12) + 1;
+    // player.position.x = Math.floor(Math.random() * 100);
+    // player.position.y = Math.floor(Math.random() * 100);
+    // this.state.players.set(client.sessionId, player);
   }
 
   onLeave (client: Client, consented: boolean) {
     console.log(client.sessionId, "left!");
-    this.state.players.delete(client.sessionId);
+    // this.state.players.delete(client.sessionId);
   }
 
   onDispose() {

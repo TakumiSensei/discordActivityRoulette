@@ -1,270 +1,346 @@
-import './style.css'
-import * as PIXI from "pixi.js";
-import TweenJS, { Easing, Tween } from "@tweenjs/tween.js";
-
 import { discordSDK } from './utils/DiscordSDK.js';
 import { colyseusSDK } from './utils/Colyseus.js';
-import type { MyRoomState, Player } from "../../server/src/rooms/MyRoom.js";
 import { authenticate } from './utils/Auth.js';
-import { PlayerObject } from './objects/PlayerObject.js';
-import { getStateCallbacks } from 'colyseus.js';
-// import { lerp } from './utils/MathUtils.js';
+import type { MyRoomState } from "../../server/src/rooms/MyRoom.js";
+import type { Room } from "colyseus.js";
+import './style.css';
 
-const RESOLUTION = 4;
+const WHEEL_COLORS = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#a8e6cf', '#dcedc1'];
 
-(async () => {
-  /**
-   * Create a PixiJS application.
-   */
-  const app = new PIXI.Application();
+let room: Room<MyRoomState> | null = null;
+let rouletteState = {
+  items: [] as string[],
+  isSpinning: false,
+  result: ''
+};
 
-  // Intialize the application.
-  await app.init({
-    width: window.innerWidth,
-    height: window.innerHeight,
-    background: '#763b36',
-    resolution: RESOLUTION,
-    roundPixels: true, // Pixel art
-  });
+// ルーレットアニメーション用の状態
+let animationFrameId: number | null = null;
+let animationStartTime: number | null = null;
+let animationDuration = 2000; // 全体のアニメーション時間
+let startRotation = 0;
+let endRotation = 0;
+let spinningTargetIndex = 0;
+// spinningRandomOffsetはグローバルで管理し、ルーレット1回転ごとに生成・保持
+// アニメーション終了後もリセットしない
+let spinningRandomOffset = 0;
+let isAnimating = false;
+let resultConfirmed = false;
+let currentRotation = 0; // ← 追加
 
-  // Pixel art
-  app.canvas.style.imageRendering = "pixelated";
-  PIXI.TextureSource.defaultOptions.scaleMode = PIXI.DEPRECATED_SCALE_MODES.NEAREST;
+function initializeRoulette() {
+  const app = document.querySelector('#app');
+  if (!app) return;
+  app.innerHTML = `
+    <div class="main-content">
+      <div class="roulette-container">
+        <h2 class="roulette-title">🎯 ランダムルーレット</h2>
+        <div class="wheel-section">
+          <div class="wheel-pointer"></div>
+          <div class="wheel-container" id="wheelContainer"></div>
+        </div>
+        <div class="result-display" id="resultDisplay">
+          ${rouletteState.result || '結果がここに表示されます'}
+        </div>
+        <div class="input-section">
+          <div class="input-group">
+            <input type="text" id="itemInput" placeholder="項目を入力してください" />
+            <button class="add-button" id="addButton">追加</button>
+          </div>
+          <div class="items-list" id="itemsList">
+            ${rouletteState.items.map(item => `
+              <span class="item-tag">
+                ${item}
+                <button class="remove-item" data-item="${item}">×</button>
+              </span>
+            `).join('')}
+          </div>
+          <button class="spin-button" id="spinButton" ${rouletteState.items.length === 0 ? 'disabled' : ''}>
+            🎲 ルーレットを回す
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  setupEventListeners();
+  updateWheel();
+}
 
-  await PIXI.Assets.load([
-    /**
-     * Heros
-     */
-    { alias: "hero1", src: 'kenney_tiny-dungeon/Tiles/tile_0084.png' },
-    { alias: "hero2", src: 'kenney_tiny-dungeon/Tiles/tile_0088.png' },
-    { alias: "hero3", src: 'kenney_tiny-dungeon/Tiles/tile_0087.png' },
-    { alias: "hero4", src: 'kenney_tiny-dungeon/Tiles/tile_0086.png' },
-    { alias: "hero5", src: 'kenney_tiny-dungeon/Tiles/tile_0085.png' },
-    { alias: "hero6", src: 'kenney_tiny-dungeon/Tiles/tile_0096.png' },
-    { alias: "hero7", src: 'kenney_tiny-dungeon/Tiles/tile_0097.png' },
-    { alias: "hero8", src: 'kenney_tiny-dungeon/Tiles/tile_0098.png' },
-    { alias: "hero9", src: 'kenney_tiny-dungeon/Tiles/tile_0099.png' },
-    { alias: "hero10", src: 'kenney_tiny-dungeon/Tiles/tile_0100.png' },
-    { alias: "hero11", src: 'kenney_tiny-dungeon/Tiles/tile_0111.png' },
-    { alias: "hero12", src: 'kenney_tiny-dungeon/Tiles/tile_0112.png' },
+// 項目追加・削除時にspinningRandomOffsetをリセット
+function addItem() {
+  const input = document.getElementById('itemInput') as HTMLInputElement | null;
+  if (!input) return;
+  const item = input.value.trim();
+  if (item && !rouletteState.items.includes(item) && room) {
+    spinningRandomOffset = 0; // 追加時リセット
+    currentRotation = 0;      // 追加時リセット
+    room.send("add_item", { item });
+    input.value = '';
+  }
+}
 
-    /**
-     * Potions
-     */
-    { alias: "potion1", src: 'kenney_tiny-dungeon/Tiles/tile_0128.png' },
-    { alias: "potion2", src: 'kenney_tiny-dungeon/Tiles/tile_0127.png' },
-    { alias: "potion3", src: 'kenney_tiny-dungeon/Tiles/tile_0126.png' },
-    { alias: "potion4", src: 'kenney_tiny-dungeon/Tiles/tile_0125.png' },
-    { alias: "potion5", src: 'kenney_tiny-dungeon/Tiles/tile_0113.png' },
-    { alias: "potion6", src: 'kenney_tiny-dungeon/Tiles/tile_0114.png' },
-    { alias: "potion7", src: 'kenney_tiny-dungeon/Tiles/tile_0115.png' },
-    { alias: "potion7", src: 'kenney_tiny-dungeon/Tiles/tile_0116.png' },
+function removeItem(item: string) {
+  if (room) {
+    spinningRandomOffset = 0; // 削除時リセット
+    currentRotation = 0;      // 削除時リセット
+    room.send("remove_item", { item });
+  }
+}
 
-    /**
-     * Weapons
-     */
-    { alias: "shield1", src: 'kenney_tiny-dungeon/Tiles/tile_0101.png' },
-    { alias: "shield2", src: 'kenney_tiny-dungeon/Tiles/tile_0102.png' },
-    { alias: "sword1", src: 'kenney_tiny-dungeon/Tiles/tile_0103.png' },
-    { alias: "sword2", src: 'kenney_tiny-dungeon/Tiles/tile_0104.png' },
-    { alias: "sword3", src: 'kenney_tiny-dungeon/Tiles/tile_0105.png' },
-    { alias: "sword4", src: 'kenney_tiny-dungeon/Tiles/tile_0106.png' },
-    { alias: "sword5", src: 'kenney_tiny-dungeon/Tiles/tile_0107.png' },
-    { alias: "axe1", src: 'kenney_tiny-dungeon/Tiles/tile_0117.png' },
-    { alias: "axe2", src: 'kenney_tiny-dungeon/Tiles/tile_0118.png' },
-    { alias: "axe3", src: 'kenney_tiny-dungeon/Tiles/tile_0119.png' },
-    { alias: "staff1", src: 'kenney_tiny-dungeon/Tiles/tile_0129.png' },
-    { alias: "staff2", src: 'kenney_tiny-dungeon/Tiles/tile_0130.png' },
-    { alias: "staff3", src: 'kenney_tiny-dungeon/Tiles/tile_0131.png' },
+function spinRoulette() {
+  if (rouletteState.items.length === 0 || rouletteState.isSpinning || !room) return;
+  room.send("spin", {});
+}
 
-    /**
-     * Monsters
-     */
-    { alias: "monster1", src: 'kenney_tiny-dungeon/Tiles/tile_0108.png' },
-    { alias: "monster2", src: 'kenney_tiny-dungeon/Tiles/tile_0109.png' },
-    { alias: "monster3", src: 'kenney_tiny-dungeon/Tiles/tile_0110.png' },
-    { alias: "monster4", src: 'kenney_tiny-dungeon/Tiles/tile_0111.png' },
-    { alias: "monster5", src: 'kenney_tiny-dungeon/Tiles/tile_0122.png' },
-    { alias: "monster6", src: 'kenney_tiny-dungeon/Tiles/tile_0121.png' },
-    { alias: "monster7", src: 'kenney_tiny-dungeon/Tiles/tile_0120.png' },
-    { alias: "monster8", src: 'kenney_tiny-dungeon/Tiles/tile_0123.png' },
-    { alias: "monster9", src: 'kenney_tiny-dungeon/Tiles/tile_0124.png' },
-  ]);
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
 
-  // Then adding the application's canvas to the DOM body.
-  document.body.appendChild(app.canvas);
+function startRouletteAnimation() {
+  if (isAnimating) return;
+  const wheelContainer = document.getElementById('wheelContainer');
+  if (!wheelContainer) return;
+  isAnimating = true;
+  resultConfirmed = false;
+  // アニメーションパラメータ初期化
+  const items = rouletteState.items;
+  const segmentAngle = 360 / items.length;
+  // 仮ターゲット（ランダム）
+  spinningTargetIndex = Math.floor(Math.random() * items.length);
+  // spinningRandomOffsetはここでのみ生成
+  spinningRandomOffset = (Math.random() - 0.5) * (segmentAngle * 2 / 3);
+  startRotation = ((currentRotation % 360) + 360) % 360;
+  // 3〜5回転して仮ターゲットに向かう
+  endRotation = startRotation + (3 + Math.random() * 2) * 360 + (360 - (spinningTargetIndex * segmentAngle + segmentAngle / 2 + spinningRandomOffset));
+  animationDuration = 1500 + Math.random() * 700; // 1.5〜2.2秒
+  animationStartTime = Date.now();
+  animateRoulette();
+}
 
-  /**
-   * Main game variables
-   */
-  let localPlayer: PIXI.Container; // we will use this to store the local player
-  let playerSprites = new Map<Player, PIXI.Container>();
+function animateRoulette() {
+  const wheelContainer = document.getElementById('wheelContainer');
+  const resultDisplay = document.getElementById('resultDisplay');
+  if (!wheelContainer || !resultDisplay || animationStartTime === null) return;
+  const now = Date.now();
+  const elapsed = now - animationStartTime;
+  const progress = Math.min(elapsed / animationDuration, 1);
+  const ease = easeInOutCubic(progress);
+  currentRotation = startRotation + (endRotation - startRotation) * ease;
+  wheelContainer.style.transform = `rotate(${currentRotation}deg)`;
+  // アニメーション中のみ結果欄を更新
+  if (progress < 1) {
+    const pointedItem = getCurrentPointedItemFromRotation(currentRotation, spinningRandomOffset);
+    resultDisplay.textContent = pointedItem;
+    animationFrameId = requestAnimationFrame(animateRoulette);
+  } else {
+    animationFrameId = null;
+    isAnimating = false;
+    // spinningRandomOffsetはリセットしない
+    // 停止位置の項目をそのまま表示（以降はupdateUIで上書きしない）
+    const pointedItem = getCurrentPointedItemFromRotation(currentRotation, spinningRandomOffset);
+    resultDisplay.textContent = pointedItem;
+    // フラグで「結果欄は確定済み」とする
+    resultDisplay.setAttribute('data-locked', 'true');
+  }
+}
 
-  try {
-    /**
-     * Authenticate with Discord and get Colyseus JWT token
-     */
-    const authData = await authenticate();
+// サーバーからresultが確定したら、ターゲットに向かって減速して止める
+function confirmRouletteResult() {
+  if (!isAnimating) return;
+  if (resultConfirmed) return;
+  resultConfirmed = true;
+  const items = rouletteState.items;
+  const segmentAngle = 360 / items.length;
+  const resultIndex = items.indexOf(rouletteState.result);
+  if (resultIndex === -1) return;
+  // spinningRandomOffsetは再生成しない
+  const wheelContainer = document.getElementById('wheelContainer');
+  if (!wheelContainer) return;
+  const current = currentRotation;
+  startRotation = current;
+  const targetRotation = 360 - (resultIndex * segmentAngle + segmentAngle / 2 + spinningRandomOffset);
+  let normalizedCurrent = ((current % 360) + 360) % 360;
+  let diff = targetRotation - normalizedCurrent;
+  if (diff < 0) diff += 360;
+  endRotation = current + diff + 2 * 360; // 2回転以上してターゲット
+  animationDuration = 1000 + Math.random() * 500; // 1.0〜1.5秒
+  animationStartTime = Date.now();
+  animateRoulette();
+}
 
-    // Assign the token to authenticate with Colyseus (Room's onAuth)
-    colyseusSDK.auth.token = authData.token;
+function getCurrentPointedItemFromRotation(rotation: number, offset: number = spinningRandomOffset): string {
+  if (rouletteState.items.length === 0) return '';
+  const segmentAngle = 360 / rouletteState.items.length;
+  // 0度が項目の中心になるように調整
+  let normalizedRotation = ((rotation % 360) + 360) % 360;
+  let index = Math.round((360 - normalizedRotation - segmentAngle / 2 - offset) / segmentAngle) % rouletteState.items.length;
+  if (index < 0) index += rouletteState.items.length;
+  return rouletteState.items[index] || '';
+}
 
-  } catch (e) {
-    console.error("Failed to authenticate", e);
-
-    const error = new PIXI.Text({
-      anchor: 0.5,
-      text: "Failed to authenticate.",
-      style: {
-        fontSize: 18,
-        fill: 0xff0000,
-        stroke: 0x000000,
-      }
-    });
-    error.position.x = app.screen.width / (RESOLUTION * 2);
-    error.position.y = app.screen.height / (RESOLUTION * 2);
-
-    app.stage.addChild(error);
+function updateWheel() {
+  const wheelContainer = document.getElementById('wheelContainer');
+  if (!wheelContainer) return;
+  if (rouletteState.items.length === 0) {
+    wheelContainer.style.background = 'conic-gradient(from 0deg, #ccc 0deg 360deg)';
+    wheelContainer.innerHTML = '';
+    if (!isAnimating) {
+      wheelContainer.style.transform = '';
+      currentRotation = 0;
+      spinningRandomOffset = 0;
+    }
     return;
   }
-
-  /**
-   * Join the game room
-   */
-  const room = await colyseusSDK.joinOrCreate<MyRoomState>("my_room", {
-    channelId: discordSDK.channelId // join by channel ID
+  const segmentAngle = 360 / rouletteState.items.length;
+  let gradient = 'conic-gradient(from 0deg';
+  rouletteState.items.forEach((item, index) => {
+    const color = WHEEL_COLORS[index % WHEEL_COLORS.length];
+    const startAngle = index * segmentAngle;
+    const endAngle = (index + 1) * segmentAngle;
+    gradient += `, ${color} ${startAngle}deg ${endAngle}deg`;
   });
+  gradient += ')';
+  wheelContainer.style.background = gradient;
+  const itemLabels = rouletteState.items.map((item, index) => {
+    // 中心が0度に来るように調整
+    const angle = index * segmentAngle + segmentAngle / 2;
+    const radius = 110;
+    const x = Math.cos((angle - 90) * Math.PI / 180) * radius;
+    const y = Math.sin((angle - 90) * Math.PI / 180) * radius;
+    return `
+      <div class="wheel-label" style="
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(${x}px, ${y}px) rotate(${angle}deg);
+        color: white;
+        font-weight: bold;
+        font-size: 16px;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.9);
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 5;
+        text-align: center;
+        width: 80px;
+        margin-left: -40px;
+      ">
+        ${item}
+      </div>
+    `;
+  }).join('');
+  wheelContainer.innerHTML = itemLabels;
+  // アニメーション中・停止後はtransform/currentRotationを絶対に上書きしない
+  // 項目追加・削除時や新ルーレット開始時のみリセット
+}
 
-  const $ = getStateCallbacks(room);
-
-  /**
-   * On player join
-   */
-  $(room.state).players.onAdd((player, sessionId) => {
-    const sprite = new PlayerObject(player);
-    playerSprites.set(player, sprite);
-
-    if (sessionId === room.sessionId) {
-      // Set local/current player
-      localPlayer = sprite;
-
-      // Set its initial position
-      // (Do not listen for changes, as we are the ones changing the local player!)
-      sprite.position.x = player.position.x;
-      sprite.position.y = player.position.y;
-
-    } else {
-      // Listen for changes of other players
-      $(player).position.onChange(() => {
-        sprite.position.x = player.position.x;
-        sprite.position.y = player.position.y;
+// updateUIで結果欄を上書きしないように修正
+function updateUI() {
+  updateWheel();
+  // itemsList再描画＋削除ボタン
+  const itemsList = document.getElementById('itemsList') as HTMLElement | null;
+  if (itemsList) {
+    itemsList.innerHTML = rouletteState.items.map((item, index) => {
+      const color = WHEEL_COLORS[index % WHEEL_COLORS.length];
+      return `
+        <span class="item-tag" style="border-left: 4px solid ${color}">
+          ${item}
+          <button class="remove-item" data-item="${item}" style="background-color: ${color}">×</button>
+        </span>
+      `;
+    }).join('');
+    // 削除ボタンのイベントリスナー再設定
+    itemsList.querySelectorAll('.remove-item').forEach(btn => {
+      btn.addEventListener('click', (event) => {
+        const target = event.target as HTMLElement;
+        const item = target.getAttribute('data-item');
+        if (item) removeItem(item);
       });
+    });
+  }
+  // spinButtonの有効化制御
+  const spinButton = document.getElementById('spinButton') as HTMLButtonElement | null;
+  if (spinButton) {
+    spinButton.disabled = rouletteState.items.length === 0 || rouletteState.isSpinning;
+    spinButton.textContent = rouletteState.isSpinning ? '🎲 回転中...' : '🎲 ルーレットを回す';
+    if (rouletteState.isSpinning) {
+      spinButton.classList.add('spinning');
+    } else {
+      spinButton.classList.remove('spinning');
     }
-
-    // Fade in effect
-    sprite.scale.x = 0;
-    sprite.scale.y = 0;
-    sprite.alpha = 0;
-    new Tween(sprite.scale)
-      .to({ x: 1, y: 1 }, 250)
-      .easing(Easing.Quadratic.Out)
-      .start();
-    new Tween(sprite)
-      .to({ alpha: 1 }, 300)
-      .start();
-    // End fade effect
-
-    app.stage.addChild(sprite);
-  });
-
-  /**
-   * On player leave
-   */
-  $(room.state).players.onRemove((player, sessionId) => {
-    const sprite = playerSprites.get(player)!;
-
-    // Fade out & Remove sprite
-    new Tween(sprite.scale)
-      .to({ x: 0.1, y: 0.1 }, 100)
-      .easing(Easing.Quadratic.Out)
-      .onComplete(() => {
-        app.stage.removeChild(sprite);
-      })
-      .start();
-  });
-
-  /**
-   * Player input handling
-   */
-  const keys = {
-    up: false,
-    down: false,
-    left: false,
-    right: false,
-  };
-
-  /**
-   * Keyboard events
-   */
-  window.addEventListener("keydown", (event) => {
-    if (event.key === "ArrowUp" || event.key === "w") {
-      keys.up = true;
-    } else if (event.key === "ArrowDown" || event.key === "s") {
-      keys.down = true;
-    } else if (event.key === "ArrowLeft" || event.key === "a") {
-      keys.left = true;
-    } else if (event.key === "ArrowRight" || event.key === "d") {
-      keys.right = true;
+  }
+  // 結果欄のロック判定
+  const resultDisplay = document.getElementById('resultDisplay');
+  const isLocked = resultDisplay?.getAttribute('data-locked') === 'true';
+  if (!isLocked && resultDisplay && !isAnimating) {
+    resultDisplay.textContent = rouletteState.result || '結果がここに表示されます';
+  }
+  if (rouletteState.isSpinning) {
+    if (!isAnimating && rouletteState.items.length > 0) {
+      if (resultDisplay) resultDisplay.removeAttribute('data-locked');
+      startRouletteAnimation();
     }
-  });
-
-  window.addEventListener("keyup", (event) => {
-    if (event.key === "ArrowUp" || event.key === "w") {
-      keys.up = false;
-    } else if (event.key === "ArrowDown" || event.key === "s") {
-      keys.down = false;
-    } else if (event.key === "ArrowLeft" || event.key === "a") {
-      keys.left = false;
-    } else if (event.key === "ArrowRight" || event.key === "d") {
-      keys.right = false;
+    if (isAnimating && rouletteState.result && !resultConfirmed) {
+      confirmRouletteResult();
     }
-  });
+  }
+}
 
-  /**
-   * Main Game Loop
-   */
-  app.ticker.add((time) => {
-    TweenJS.update(app.ticker.lastTime);
-
-    if (localPlayer) {
-      if (keys.up) {
-        localPlayer.position.y -= 1;
-      } else if (keys.down) {
-        localPlayer.position.y += 1;
+function setupEventListeners() {
+  const addButton = document.getElementById('addButton') as HTMLButtonElement | null;
+  if (addButton) {
+    addButton.addEventListener('click', addItem);
+  }
+  const itemInput = document.getElementById('itemInput') as HTMLInputElement | null;
+  if (itemInput) {
+    itemInput.addEventListener('keypress', (event: KeyboardEvent) => {
+      if (event.key === 'Enter') {
+        addItem();
       }
-
-      if (keys.left) {
-        localPlayer.position.x -= 1;
-      } else if (keys.right) {
-        localPlayer.position.x += 1;
+    });
+  }
+  const spinButton = document.getElementById('spinButton') as HTMLButtonElement | null;
+  if (spinButton) {
+    spinButton.addEventListener('click', spinRoulette);
+  }
+  const itemsList = document.getElementById('itemsList') as HTMLElement | null;
+  if (itemsList) {
+    itemsList.addEventListener('click', (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && target.classList.contains('remove-item')) {
+        const item = target.getAttribute('data-item');
+        if (item) {
+          removeItem(item);
+        }
       }
+    });
+  }
+}
 
-      // /**
-      //  * Interpolate other players
-      //  */
-      // playerSprites.forEach((sprite, player) => {
-      //   if (sprite === localPlayer) { return; }
-      //   sprite.position.x = lerp(sprite.position.x, player.position.x, 0.2);
-      //   sprite.position.y = lerp(sprite.position.y, player.position.y, 0.2);
-      // });
-
-      // Client-authoritative positioning
-      room.send("move", {
-        x: localPlayer.position.x,
-        y: localPlayer.position.y
-      })
-    }
-
+async function main() {
+  // Colyseus認証
+  const authData = await authenticate();
+  colyseusSDK.auth.token = authData.token;
+  // Room参加
+  room = await colyseusSDK.joinOrCreate("my_room", {
+    channelId: discordSDK.channelId
   });
+  // Room State購読（state全体のonChangeで検知）
+  if (room) {
+    room.onStateChange((state: MyRoomState) => {
+      rouletteState.items = Array.from(state.roulette.items);
+      rouletteState.isSpinning = state.roulette.isSpinning;
+      rouletteState.result = state.roulette.result;
+      updateUI();
+    });
+    // 初期UI
+    document.body.innerHTML = '<div id="app"></div>';
+    initializeRoulette();
+    // 初期状態反映
+    rouletteState.items = Array.from(room.state.roulette.items);
+    rouletteState.isSpinning = room.state.roulette.isSpinning;
+    rouletteState.result = room.state.roulette.result;
+    updateUI();
+  }
+}
 
-})();
+document.addEventListener('DOMContentLoaded', main);
