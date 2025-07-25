@@ -2,6 +2,7 @@ import config from "@colyseus/tools";
 import { monitor } from "@colyseus/monitor";
 import { playground } from "@colyseus/playground";
 import { auth, JWT } from "@colyseus/auth";
+import express from "express";
 
 /**
  * Import your Room files
@@ -18,6 +19,8 @@ export default config({
     },
 
     initializeExpress: (app) => {
+        // 静的ファイル配信を追加
+        app.use(express.static("public"));
         /**
          * Bind your custom express routes here:
          * Read more: https://expressjs.com/en/starter/basic-routing.html
