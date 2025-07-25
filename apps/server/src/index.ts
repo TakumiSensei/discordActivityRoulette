@@ -15,5 +15,6 @@ import { listen } from "@colyseus/tools";
 // Import Colyseus config
 import app from "./app.config";
 
-// Create and listen on 2567 (or PORT environment variable.)
-listen(app);
+// Cloud Run対応: PORT環境変数があればそれを使う
+const port = process.env.PORT ? Number(process.env.PORT) : 2567;
+listen(app, port);
