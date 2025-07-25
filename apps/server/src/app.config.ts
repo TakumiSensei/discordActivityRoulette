@@ -32,7 +32,7 @@ export default config({
         //
         // Discord Embedded SDK: Retrieve user token when under Discord/Embed
         //
-        app.post('/discord_token', async (req, res) => {
+        app.post(["/discord_token", "/colyseus/discord_token"], async (req, res) => {
           //
           // TODO: remove this on production
           //
