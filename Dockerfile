@@ -2,16 +2,16 @@
 # 1. client（フロントエンド）ビルド
 FROM node:20 AS client-build
 WORKDIR /app/client
-COPY apps/client/package.json apps/client/package-lock.json ./
-RUN npm ci
+COPY apps/client/package.json ./
+RUN npm install
 COPY apps/client/ ./
 RUN npm run build
 
 # 2. server（バックエンド）ビルド
 FROM node:20 AS server-build
 WORKDIR /app/server
-COPY apps/server/package.json apps/server/package-lock.json ./
-RUN npm ci
+COPY apps/server/package.json ./
+RUN npm install
 COPY apps/server/ ./
 # clientのビルド成果物をserverのpublicにコピー
 COPY --from=client-build /app/client/dist ./public
