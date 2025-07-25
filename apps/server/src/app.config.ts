@@ -3,6 +3,7 @@ import { monitor } from "@colyseus/monitor";
 import { playground } from "@colyseus/playground";
 import { auth, JWT } from "@colyseus/auth";
 import express from "express";
+import cors from "cors";
 
 /**
  * Import your Room files
@@ -19,6 +20,12 @@ export default config({
     },
 
     initializeExpress: (app) => {
+        // CORS設定を追加（Discord Activity対応）
+        app.use(cors({
+            origin: true,
+            credentials: true
+        }));
+        
         // 静的ファイル配信を追加
         app.use(express.static("public"));
         /**
