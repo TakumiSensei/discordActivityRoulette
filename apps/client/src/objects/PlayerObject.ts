@@ -1,8 +1,8 @@
 import * as PIXI from "pixi.js";
-import { Player } from "../../../server/src/rooms/MyRoom.js";
+// import { Player } from "../../../server/src/rooms/MyRoom.js";
 
 export class PlayerObject extends PIXI.Container {
-  constructor(player: Player) {
+  constructor(player: any) {
     super();
 
     // hero sprite

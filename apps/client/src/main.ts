@@ -1,13 +1,12 @@
 import { discordSDK } from './utils/DiscordSDK.js';
 import { colyseusSDK } from './utils/Colyseus.js';
 import { authenticate } from './utils/Auth.js';
-import type { MyRoomState } from "../../server/src/rooms/MyRoom.js";
 import type { Room } from "colyseus.js";
 import './style.css';
 
 const WHEEL_COLORS = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#a8e6cf', '#dcedc1'];
 
-let room: Room<MyRoomState> | null = null;
+let room: Room<any> | null = null;
 let rouletteState = {
   items: [] as string[],
   isSpinning: false,
@@ -326,7 +325,7 @@ async function main() {
   });
   // Room State購読（state全体のonChangeで検知）
   if (room) {
-    room.onStateChange((state: MyRoomState) => {
+    room.onStateChange((state: any) => {
       rouletteState.items = Array.from(state.roulette.items);
       rouletteState.isSpinning = state.roulette.isSpinning;
       rouletteState.result = state.roulette.result;
