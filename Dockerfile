@@ -5,7 +5,7 @@ WORKDIR /app/client
 COPY apps/client/package.json ./
 RUN npm install
 COPY apps/client/ ./
-ARG VITE_DISCORD_CLIENT_ID
+ARG VITE_DISCORD_CLIENT_ID=1395937511456510123
 ENV VITE_DISCORD_CLIENT_ID=$VITE_DISCORD_CLIENT_ID
 RUN npm run build
 
