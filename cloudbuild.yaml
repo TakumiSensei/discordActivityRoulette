@@ -30,7 +30,7 @@ steps:
       - 'VITE_DISCORD_CLIENT_ID=${_VITE_DISCORD_CLIENT_ID}'
 
 substitutions:
-  _VITE_DISCORD_CLIENT_ID: 'your-discord-client-id-here'
+  _VITE_DISCORD_CLIENT_ID: '1395937511456510123'
 
 images:
   - 'gcr.io/$PROJECT_ID/discord-activity' 
