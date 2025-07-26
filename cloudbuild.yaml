@@ -1,0 +1,36 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--build-arg'
+      - 'VITE_DISCORD_CLIENT_ID=${_VITE_DISCORD_CLIENT_ID}'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/discord-activity'
+      - '.'
+    env:
+      - 'VITE_DISCORD_CLIENT_ID=${_VITE_DISCORD_CLIENT_ID}'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/discord-activity']
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'discord-activity'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/discord-activity'
+      - '--region'
+      - 'asia-northeast1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars'
+      - 'VITE_DISCORD_CLIENT_ID=${_VITE_DISCORD_CLIENT_ID}'
+
+substitutions:
+  _VITE_DISCORD_CLIENT_ID: 'your-discord-client-id-here'
+
+images:
+  - 'gcr.io/$PROJECT_ID/discord-activity' 

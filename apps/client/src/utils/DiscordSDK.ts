@@ -1,6 +1,6 @@
 import { DiscordSDK, DiscordSDKMock } from '@discord/embedded-app-sdk';
 
-export const DISCORD_CLIENT_ID = process.env.VITE_DISCORD_CLIENT_ID;
+export const DISCORD_CLIENT_ID = import.meta.env.VITE_DISCORD_CLIENT_ID;
 
 const queryParams = new URLSearchParams(window.location.search);
 const isEmbedded = queryParams.get('frame_id') != null;
