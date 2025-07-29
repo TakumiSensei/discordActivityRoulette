@@ -6,30 +6,63 @@ import './style.css';
 
 const WHEEL_COLORS = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#a8e6cf', '#dcedc1'];
 
+// ルーレット状態
+interface RouletteState {
+  items: string[];
+  isSpinning: boolean;
+  result: string;
+  targetRotation: number; // サーバーから送られた目標回転角
+}
+
+// アニメーション状態
+interface AnimationState {
+  isAnimating: boolean;
+  startTime: number | null;
+  duration: number;
+  startRotation: number;
+  endRotation: number;
+  currentRotation: number;
+  targetIndex: number;
+}
+
 let room: Room<any> | null = null;
-let rouletteState = {
-  items: [] as string[],
+let rouletteState: RouletteState = {
+  items: [],
   isSpinning: false,
-  result: ''
+  result: "",
+  targetRotation: 0
 };
 
-// ルーレットアニメーション用の状態
+let animationState: AnimationState = {
+  isAnimating: false,
+  startTime: null,
+  duration: 3000,
+  startRotation: 0,
+  endRotation: 0,
+  currentRotation: 0,
+  targetIndex: 0
+};
+
 let animationFrameId: number | null = null;
-let animationStartTime: number | null = null;
-let animationDuration = 2000; // 全体のアニメーション時間
-let startRotation = 0;
-let endRotation = 0;
-let spinningTargetIndex = 0;
-// spinningRandomOffsetはグローバルで管理し、ルーレット1回転ごとに生成・保持
-// アニメーション終了後もリセットしない
-let spinningRandomOffset = 0;
-let isAnimating = false;
-let resultConfirmed = false;
-let currentRotation = 0; // ← 追加
+
+// 自然なイージング関数（シンプルな加速→減速）
+function naturalEase(t: number): number {
+  // 滑らかな加速→減速の2段階
+  if (t < 0.5) {
+    // 加速段階 (0-50%): 滑らかな加速
+    const normalizedT = t / 0.5;
+    return Math.pow(normalizedT, 3) * 0.5;
+  } else {
+    // 減速段階 (50-100%): 滑らかな減速
+    const normalizedT = (t - 0.5) / 0.5;
+    return 0.5 + (1 - Math.pow(1 - normalizedT, 3)) * 0.5;
+  }
+}
 
 function initializeRoulette() {
   const app = document.querySelector('#app');
   if (!app) return;
+  
   app.innerHTML = `
     <div class="main-content">
       <div class="roulette-container">
@@ -38,41 +71,30 @@ function initializeRoulette() {
           <div class="wheel-pointer"></div>
           <div class="wheel-container" id="wheelContainer"></div>
         </div>
-        <div class="result-display" id="resultDisplay">
-          ${rouletteState.result || '結果がここに表示されます'}
-        </div>
         <div class="input-section">
           <div class="input-group">
             <input type="text" id="itemInput" placeholder="項目を入力してください" />
             <button class="add-button" id="addButton">追加</button>
           </div>
-          <div class="items-list" id="itemsList">
-            ${rouletteState.items.map(item => `
-              <span class="item-tag">
-                ${item}
-                <button class="remove-item" data-item="${item}">×</button>
-              </span>
-            `).join('')}
-          </div>
-          <button class="spin-button" id="spinButton" ${rouletteState.items.length === 0 ? 'disabled' : ''}>
+          <div class="items-list" id="itemsList"></div>
+          <button class="spin-button" id="spinButton" disabled>
             🎲 ルーレットを回す
           </button>
         </div>
       </div>
     </div>
   `;
+  
   setupEventListeners();
   updateWheel();
 }
 
-// 項目追加・削除時にspinningRandomOffsetをリセット
 function addItem() {
   const input = document.getElementById('itemInput') as HTMLInputElement | null;
   if (!input) return;
+  
   const item = input.value.trim();
   if (item && !rouletteState.items.includes(item) && room) {
-    spinningRandomOffset = 0; // 追加時リセット
-    currentRotation = 0;      // 追加時リセット
     room.send("add_item", { item });
     input.value = '';
   }
@@ -80,117 +102,122 @@ function addItem() {
 
 function removeItem(item: string) {
   if (room) {
-    spinningRandomOffset = 0; // 削除時リセット
-    currentRotation = 0;      // 削除時リセット
     room.send("remove_item", { item });
   }
 }
 
 function spinRoulette() {
-  if (rouletteState.items.length === 0 || rouletteState.isSpinning || !room) return;
+  if (rouletteState.items.length === 0 || rouletteState.isSpinning || !room || animationState.isAnimating) return;
+  
   room.send("spin", {});
 }
 
-function easeInOutCubic(t: number): number {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
-function startRouletteAnimation() {
-  if (isAnimating) return;
-  const wheelContainer = document.getElementById('wheelContainer');
-  if (!wheelContainer) return;
-  isAnimating = true;
-  resultConfirmed = false;
-  // アニメーションパラメータ初期化
-  const items = rouletteState.items;
-  const segmentAngle = 360 / items.length;
-  // 仮ターゲット（ランダム）
-  spinningTargetIndex = Math.floor(Math.random() * items.length);
-  // spinningRandomOffsetはここでのみ生成
-  spinningRandomOffset = (Math.random() - 0.5) * (segmentAngle * 2 / 3);
-  startRotation = ((currentRotation % 360) + 360) % 360;
-  // 3〜5回転して仮ターゲットに向かう
-  endRotation = startRotation + (3 + Math.random() * 2) * 360 + (360 - (spinningTargetIndex * segmentAngle + segmentAngle / 2 + spinningRandomOffset));
-  animationDuration = 1500 + Math.random() * 700; // 1.5〜2.2秒
-  animationStartTime = Date.now();
-  animateRoulette();
-}
-
-function animateRoulette() {
-  const wheelContainer = document.getElementById('wheelContainer');
-  const resultDisplay = document.getElementById('resultDisplay');
-  if (!wheelContainer || !resultDisplay || animationStartTime === null) return;
-  const now = Date.now();
-  const elapsed = now - animationStartTime;
-  const progress = Math.min(elapsed / animationDuration, 1);
-  const ease = easeInOutCubic(progress);
-  currentRotation = startRotation + (endRotation - startRotation) * ease;
-  wheelContainer.style.transform = `rotate(${currentRotation}deg)`;
-  // アニメーション中のみ結果欄を更新
-  if (progress < 1) {
-    const pointedItem = getCurrentPointedItemFromRotation(currentRotation, spinningRandomOffset);
-    resultDisplay.textContent = pointedItem;
-    animationFrameId = requestAnimationFrame(animateRoulette);
-  } else {
-    animationFrameId = null;
-    isAnimating = false;
-    // spinningRandomOffsetはリセットしない
-    // 停止位置の項目をそのまま表示（以降はupdateUIで上書きしない）
-    const pointedItem = getCurrentPointedItemFromRotation(currentRotation, spinningRandomOffset);
-    resultDisplay.textContent = pointedItem;
-    // フラグで「結果欄は確定済み」とする
-    resultDisplay.setAttribute('data-locked', 'true');
+function startAnimation() {
+  if (animationState.isAnimating) {
+    return;
   }
-}
-
-// サーバーからresultが確定したら、ターゲットに向かって減速して止める
-function confirmRouletteResult() {
-  if (!isAnimating) return;
-  if (resultConfirmed) return;
-  resultConfirmed = true;
-  const items = rouletteState.items;
-  const segmentAngle = 360 / items.length;
-  const resultIndex = items.indexOf(rouletteState.result);
-  if (resultIndex === -1) return;
-  // spinningRandomOffsetは再生成しない
+  
   const wheelContainer = document.getElementById('wheelContainer');
-  if (!wheelContainer) return;
-  const current = currentRotation;
-  startRotation = current;
-  const targetRotation = 360 - (resultIndex * segmentAngle + segmentAngle / 2 + spinningRandomOffset);
-  let normalizedCurrent = ((current % 360) + 360) % 360;
-  let diff = targetRotation - normalizedCurrent;
-  if (diff < 0) diff += 360;
-  endRotation = current + diff + 2 * 360; // 2回転以上してターゲット
-  animationDuration = 1000 + Math.random() * 500; // 1.0〜1.5秒
-  animationStartTime = Date.now();
-  animateRoulette();
+  if (!wheelContainer) {
+    return;
+  }
+  
+  const items = rouletteState.items;
+  if (items.length === 0) {
+    return;
+  }
+  
+  console.log('Animation calculation:', {
+    result: rouletteState.result,
+    targetRotation: rouletteState.targetRotation,
+    currentRotation: animationState.currentRotation,
+    startRotation: animationState.startRotation
+  });
+  
+  // アニメーション状態を初期化
+  animationState.isAnimating = true;
+  animationState.startRotation = animationState.currentRotation;
+  
+  // サーバーから送られた目標回転角を使用して、現在位置からの相対的な回転角を計算
+  // 例: サーバー側が55度、現在位置が60度の場合、360-60+55=355度回転
+  const currentNormalized = ((animationState.currentRotation % 360) + 360) % 360;
+  const targetNormalized = rouletteState.targetRotation;
+  
+  // 現在位置から目標位置までの最短距離を計算
+  let relativeRotation = targetNormalized - currentNormalized;
+  if (relativeRotation < 0) {
+    relativeRotation += 360;
+  }
+  
+  // 3回転分を追加（1080度）
+  const totalRotation = relativeRotation + 1080;
+  
+  animationState.endRotation = animationState.startRotation + totalRotation;
+  
+  console.log('Rotation calculation:', {
+    currentNormalized,
+    targetNormalized,
+    relativeRotation,
+    totalRotation,
+    startRotation: animationState.startRotation,
+    endRotation: animationState.endRotation
+  });
+  
+  // アニメーション時間を設定
+  animationState.duration = 5000; // 5秒
+  animationState.startTime = Date.now();
+  
+  // 即座にアニメーション開始
+  animate();
 }
 
-function getCurrentPointedItemFromRotation(rotation: number, offset: number = spinningRandomOffset): string {
-  if (rouletteState.items.length === 0) return '';
-  const segmentAngle = 360 / rouletteState.items.length;
-  // 0度が項目の中心になるように調整
-  let normalizedRotation = ((rotation % 360) + 360) % 360;
-  let index = Math.round((360 - normalizedRotation - segmentAngle / 2 - offset) / segmentAngle) % rouletteState.items.length;
-  if (index < 0) index += rouletteState.items.length;
-  return rouletteState.items[index] || '';
+function animate() {
+  const wheelContainer = document.getElementById('wheelContainer');
+  if (!wheelContainer || animationState.startTime === null) return;
+  
+  const now = Date.now();
+  const elapsed = now - animationState.startTime;
+  const progress = Math.min(elapsed / animationState.duration, 1);
+  
+  // 自然なイージングを適用
+  const ease = naturalEase(progress);
+  
+  animationState.currentRotation = animationState.startRotation + 
+    (animationState.endRotation - animationState.startRotation) * ease;
+  
+  wheelContainer.style.transform = `rotate(${animationState.currentRotation}deg)`;
+  
+  if (progress < 1) {
+    animationFrameId = requestAnimationFrame(animate);
+  } else {
+    // アニメーション完了
+    animationFrameId = null;
+    animationState.isAnimating = false;
+    animationState.currentRotation = animationState.endRotation;
+    wheelContainer.style.transform = `rotate(${animationState.currentRotation}deg)`;
+    
+    // UIを更新してボタン状態を反映
+    updateUI();
+  }
 }
 
 function updateWheel() {
   const wheelContainer = document.getElementById('wheelContainer');
   if (!wheelContainer) return;
+  
   if (rouletteState.items.length === 0) {
     wheelContainer.style.background = 'conic-gradient(from 0deg, #ccc 0deg 360deg)';
     wheelContainer.innerHTML = '';
-    if (!isAnimating) {
+    if (!animationState.isAnimating) {
       wheelContainer.style.transform = '';
-      currentRotation = 0;
-      spinningRandomOffset = 0;
+      animationState.currentRotation = 0;
     }
     return;
   }
+  
   const segmentAngle = 360 / rouletteState.items.length;
+  
+  // グラデーション背景を作成
   let gradient = 'conic-gradient(from 0deg';
   rouletteState.items.forEach((item, index) => {
     const color = WHEEL_COLORS[index % WHEEL_COLORS.length];
@@ -200,12 +227,19 @@ function updateWheel() {
   });
   gradient += ')';
   wheelContainer.style.background = gradient;
+  
+  // アニメーション中はラベルを再設定しない
+  if (animationState.isAnimating) {
+    return;
+  }
+  
+  // ラベルを作成
   const itemLabels = rouletteState.items.map((item, index) => {
-    // 中心が0度に来るように調整
     const angle = index * segmentAngle + segmentAngle / 2;
     const radius = 110;
     const x = Math.cos((angle - 90) * Math.PI / 180) * radius;
     const y = Math.sin((angle - 90) * Math.PI / 180) * radius;
+    
     return `
       <div class="wheel-label" style="
         position: absolute;
@@ -227,61 +261,59 @@ function updateWheel() {
       </div>
     `;
   }).join('');
+  
   wheelContainer.innerHTML = itemLabels;
-  // アニメーション中・停止後はtransform/currentRotationを絶対に上書きしない
-  // 項目追加・削除時や新ルーレット開始時のみリセット
 }
 
-// updateUIで結果欄を上書きしないように修正
-function updateUI() {
-  updateWheel();
-  // itemsList再描画＋削除ボタン
+function updateItemsList() {
   const itemsList = document.getElementById('itemsList') as HTMLElement | null;
-  if (itemsList) {
-    itemsList.innerHTML = rouletteState.items.map((item, index) => {
-      const color = WHEEL_COLORS[index % WHEEL_COLORS.length];
-      return `
-        <span class="item-tag" style="border-left: 4px solid ${color}">
-          ${item}
-          <button class="remove-item" data-item="${item}" style="background-color: ${color}">×</button>
-        </span>
-      `;
-    }).join('');
-    // 削除ボタンのイベントリスナー再設定
-    itemsList.querySelectorAll('.remove-item').forEach(btn => {
-      btn.addEventListener('click', (event) => {
-        const target = event.target as HTMLElement;
-        const item = target.getAttribute('data-item');
-        if (item) removeItem(item);
-      });
+  if (!itemsList) return;
+  
+  itemsList.innerHTML = rouletteState.items.map((item, index) => {
+    const color = WHEEL_COLORS[index % WHEEL_COLORS.length];
+    return `
+      <span class="item-tag" style="border-left: 4px solid ${color}">
+        ${item}
+        <button class="remove-item" data-item="${item}" style="background-color: ${color}">×</button>
+      </span>
+    `;
+  }).join('');
+  
+  // 削除ボタンのイベントリスナーを設定
+  itemsList.querySelectorAll('.remove-item').forEach(btn => {
+    btn.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement;
+      const item = target.getAttribute('data-item');
+      if (item) removeItem(item);
     });
-  }
-  // spinButtonの有効化制御
+  });
+}
+
+function updateSpinButton() {
   const spinButton = document.getElementById('spinButton') as HTMLButtonElement | null;
-  if (spinButton) {
-    spinButton.disabled = rouletteState.items.length === 0 || rouletteState.isSpinning;
-    spinButton.textContent = rouletteState.isSpinning ? '🎲 回転中...' : '🎲 ルーレットを回す';
-    if (rouletteState.isSpinning) {
-      spinButton.classList.add('spinning');
-    } else {
-      spinButton.classList.remove('spinning');
-    }
+  if (!spinButton) return;
+  
+  // ボタンの有効/無効を決定
+  const canSpin = rouletteState.items.length > 0 && !rouletteState.isSpinning && !animationState.isAnimating;
+  spinButton.disabled = !canSpin;
+  
+  // ボタンのテキストを更新
+  if (rouletteState.isSpinning || animationState.isAnimating) {
+    spinButton.textContent = '🎲 回転中...';
+    spinButton.classList.add('spinning');
+  } else {
+    spinButton.textContent = '🎲 ルーレットを回す';
+    spinButton.classList.remove('spinning');
   }
-  // 結果欄のロック判定
-  const resultDisplay = document.getElementById('resultDisplay');
-  const isLocked = resultDisplay?.getAttribute('data-locked') === 'true';
-  if (!isLocked && resultDisplay && !isAnimating) {
-    resultDisplay.textContent = rouletteState.result || '結果がここに表示されます';
+}
+
+function updateUI() {
+  // アニメーション中はwheelの更新をスキップ
+  if (!animationState.isAnimating) {
+    updateWheel();
   }
-  if (rouletteState.isSpinning) {
-    if (!isAnimating && rouletteState.items.length > 0) {
-      if (resultDisplay) resultDisplay.removeAttribute('data-locked');
-      startRouletteAnimation();
-    }
-    if (isAnimating && rouletteState.result && !resultConfirmed) {
-      confirmRouletteResult();
-    }
-  }
+  updateItemsList();
+  updateSpinButton();
 }
 
 function setupEventListeners() {
@@ -289,6 +321,7 @@ function setupEventListeners() {
   if (addButton) {
     addButton.addEventListener('click', addItem);
   }
+  
   const itemInput = document.getElementById('itemInput') as HTMLInputElement | null;
   if (itemInput) {
     itemInput.addEventListener('keypress', (event: KeyboardEvent) => {
@@ -297,21 +330,10 @@ function setupEventListeners() {
       }
     });
   }
+  
   const spinButton = document.getElementById('spinButton') as HTMLButtonElement | null;
   if (spinButton) {
     spinButton.addEventListener('click', spinRoulette);
-  }
-  const itemsList = document.getElementById('itemsList') as HTMLElement | null;
-  if (itemsList) {
-    itemsList.addEventListener('click', (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && target.classList.contains('remove-item')) {
-        const item = target.getAttribute('data-item');
-        if (item) {
-          removeItem(item);
-        }
-      }
-    });
   }
 }
 
@@ -319,25 +341,60 @@ async function main() {
   // Colyseus認証
   const authData = await authenticate();
   colyseusSDK.auth.token = authData.token;
+  
   // Room参加
   room = await colyseusSDK.joinOrCreate("my_room", {
     channelId: discordSDK.channelId
   });
-  // Room State購読（state全体のonChangeで検知）
+  
   if (room) {
+    // Room State購読
     room.onStateChange((state: any) => {
-      rouletteState.items = Array.from(state.roulette.items);
+      const previousSpinning = rouletteState.isSpinning;
+      const previousResult = rouletteState.result;
+      
+      rouletteState.items = Array.from(state.roulette.items || []);
       rouletteState.isSpinning = state.roulette.isSpinning;
       rouletteState.result = state.roulette.result;
+      rouletteState.targetRotation = state.roulette.targetRotation; // サーバーから目標回転角を取得
+      
+      // UIを更新
       updateUI();
+      
+      // アニメーション開始チェック
+      if (rouletteState.isSpinning && !previousSpinning) {
+        // スピン開始時
+        if (rouletteState.result) {
+          // 結果が既に設定されている場合は即座にアニメーション開始
+          startAnimation();
+        }
+      } else if (!rouletteState.isSpinning && previousSpinning) {
+        // スピン停止時
+        animationState.isAnimating = false;
+        updateUI(); // UIを更新してボタン状態を反映
+      } else if (rouletteState.result && rouletteState.result !== previousResult && rouletteState.isSpinning) {
+        // 結果が設定された時
+        startAnimation();
+      }
     });
+    
     // 初期UI
     document.body.innerHTML = '<div id="app"></div>';
     initializeRoulette();
-    // 初期状態反映
-    rouletteState.items = Array.from(room.state.roulette.items);
-    rouletteState.isSpinning = room.state.roulette.isSpinning;
-    rouletteState.result = room.state.roulette.result;
+    
+    // 初期状態反映（安全に）
+    try {
+      rouletteState.items = Array.from(room.state.roulette.items || []);
+      rouletteState.isSpinning = room.state.roulette.isSpinning;
+      rouletteState.result = room.state.roulette.result;
+      rouletteState.targetRotation = room.state.roulette.targetRotation; // サーバーから目標回転角を取得
+    } catch (error) {
+      console.log('Initial state not available yet:', error);
+      rouletteState.items = [];
+      rouletteState.isSpinning = false;
+      rouletteState.result = "";
+      rouletteState.targetRotation = 0; // 初期状態では0に設定
+    }
     updateUI();
   }
 }
