@@ -56,10 +56,6 @@ export class MyRoom extends Room<MyRoomState> {
     this.onMessage("spin", (client, message) => {
       if (this.state.roulette.isSpinning || this.state.roulette.items.length === 0) return;
       
-      // 確実にランダムな結果を決定（全ユーザーが同じ結果を見るため）
-      const randomIndex = Math.floor(Math.random() * this.state.roulette.items.length);
-      const selectedItem = this.state.roulette.items[randomIndex];
-      
       // 目標回転角を生成（0-360度の範囲）
       const targetRotation = Math.floor(Math.random() * 360);
       
@@ -67,7 +63,7 @@ export class MyRoom extends Room<MyRoomState> {
       this.state.roulette.targetRotation = targetRotation;
       this.state.roulette.isSpinning = true;
       
-      console.log(`Roulette spin: selected "${selectedItem}" at index ${randomIndex}, target rotation: ${targetRotation}°`);
+      console.log(`Roulette spin: target rotation: ${targetRotation}°`);
       
       // アニメーション時間に合わせて5秒後に停止
       setTimeout(() => {
