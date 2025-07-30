@@ -10,7 +10,6 @@ const WHEEL_COLORS = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#f
 interface RouletteState {
   items: string[];
   isSpinning: boolean;
-  result: string;
   targetRotation: number; // サーバーから送られた目標回転角
 }
 
@@ -29,7 +28,6 @@ let room: Room<any> | null = null;
 let rouletteState: RouletteState = {
   items: [],
   isSpinning: false,
-  result: "",
   targetRotation: 0
 };
 
@@ -127,9 +125,25 @@ function startAnimation() {
     return;
   }
   
+  // targetRotationから結果の項目を計算
+  // ルーレットのポインターは上向き（0度）に固定されている
+  // 各セグメントは0度から始まって時計回りに配置されている
+  const segmentAngle = 360 / items.length;
+  const normalizedTargetRotation = ((rouletteState.targetRotation % 360) + 360) % 360;
+  
+  // ポインターが指す角度を計算（ポインターは上向きなので、回転角の反対方向が指す角度）
+  const pointerAngle = (360 - normalizedTargetRotation) % 360;
+  
+  // ポインターが指す角度から結果のインデックスを計算
+  const resultIndex = Math.floor(pointerAngle / segmentAngle);
+  const resultItem = items[resultIndex % items.length];
+  
   console.log('Animation calculation:', {
-    result: rouletteState.result,
+    resultItem,
     targetRotation: rouletteState.targetRotation,
+    normalizedTargetRotation,
+    pointerAngle,
+    resultIndex,
     currentRotation: animationState.currentRotation,
     startRotation: animationState.startRotation
   });
@@ -351,11 +365,10 @@ async function main() {
     // Room State購読
     room.onStateChange((state: any) => {
       const previousSpinning = rouletteState.isSpinning;
-      const previousResult = rouletteState.result;
+      const previousTargetRotation = rouletteState.targetRotation;
       
       rouletteState.items = Array.from(state.roulette.items || []);
       rouletteState.isSpinning = state.roulette.isSpinning;
-      rouletteState.result = state.roulette.result;
       rouletteState.targetRotation = state.roulette.targetRotation; // サーバーから目標回転角を取得
       
       // UIを更新
@@ -364,16 +377,16 @@ async function main() {
       // アニメーション開始チェック
       if (rouletteState.isSpinning && !previousSpinning) {
         // スピン開始時
-        if (rouletteState.result) {
-          // 結果が既に設定されている場合は即座にアニメーション開始
+        if (rouletteState.targetRotation !== 0) {
+          // 目標回転角が設定されている場合は即座にアニメーション開始
           startAnimation();
         }
       } else if (!rouletteState.isSpinning && previousSpinning) {
         // スピン停止時
         animationState.isAnimating = false;
         updateUI(); // UIを更新してボタン状態を反映
-      } else if (rouletteState.result && rouletteState.result !== previousResult && rouletteState.isSpinning) {
-        // 結果が設定された時
+      } else if (rouletteState.targetRotation !== previousTargetRotation && rouletteState.isSpinning) {
+        // 目標回転角が変更された時
         startAnimation();
       }
     });
@@ -386,13 +399,11 @@ async function main() {
     try {
       rouletteState.items = Array.from(room.state.roulette.items || []);
       rouletteState.isSpinning = room.state.roulette.isSpinning;
-      rouletteState.result = room.state.roulette.result;
       rouletteState.targetRotation = room.state.roulette.targetRotation; // サーバーから目標回転角を取得
     } catch (error) {
       console.log('Initial state not available yet:', error);
       rouletteState.items = [];
       rouletteState.isSpinning = false;
-      rouletteState.result = "";
       rouletteState.targetRotation = 0; // 初期状態では0に設定
     }
     updateUI();

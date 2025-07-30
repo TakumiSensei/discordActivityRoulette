@@ -17,8 +17,7 @@ export class Player extends Schema {
 export class RouletteState extends Schema {
   @type(["string"]) items = new ArraySchema<string>();
   @type("boolean") isSpinning: boolean = false;
-  @type("string") result: string = "";
-  @type("number") targetRotation: number = 0; // 目標回転角を追加
+  @type("number") targetRotation: number = 0; // 目標回転角
 }
 
 // export class MyRoomState extends Schema {
@@ -52,10 +51,6 @@ export class MyRoom extends Room<MyRoomState> {
       if (idx !== -1) {
         this.state.roulette.items.splice(idx, 1);
       }
-      // 結果が削除された場合はリセット
-      if (this.state.roulette.result === item) {
-        this.state.roulette.result = "";
-      }
     });
     // ルーレット回転
     this.onMessage("spin", (client, message) => {
@@ -68,8 +63,7 @@ export class MyRoom extends Room<MyRoomState> {
       // 目標回転角を生成（0-360度の範囲）
       const targetRotation = Math.floor(Math.random() * 360);
       
-      // 結果と目標回転角を即座に設定
-      this.state.roulette.result = selectedItem;
+      // 目標回転角を即座に設定
       this.state.roulette.targetRotation = targetRotation;
       this.state.roulette.isSpinning = true;
       
@@ -78,7 +72,7 @@ export class MyRoom extends Room<MyRoomState> {
       // アニメーション時間に合わせて5秒後に停止
       setTimeout(() => {
         this.state.roulette.isSpinning = false;
-        console.log(`Roulette stopped: final result "${this.state.roulette.result}" at rotation ${this.state.roulette.targetRotation}°`);
+        console.log(`Roulette stopped: target rotation ${this.state.roulette.targetRotation}°`);
       }, 5000);
     });
   }
