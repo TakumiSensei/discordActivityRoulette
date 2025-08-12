@@ -69,6 +69,7 @@ function initializeRoulette() {
     <div class="main-content">
       <div class="roulette-container">
         <h2 class="roulette-title">🎯 ランダムルーレット</h2>
+        <div class="result-display" id="resultDisplay"></div>
         <div class="wheel-section">
           <div class="wheel-pointer"></div>
           <div class="wheel-container" id="wheelContainer"></div>
@@ -129,6 +130,12 @@ function startAnimation() {
     return;
   }
   
+  // 結果欄をクリア
+  const resultDisplay = document.getElementById('resultDisplay');
+  if (resultDisplay) {
+    resultDisplay.textContent = '';
+  }
+
   // ルーレット効果音開始
   audioManager.playRoulette();
 
@@ -144,6 +151,7 @@ function startAnimation() {
   // ポインターが指す角度から結果のインデックスを計算
   const resultIndex = Math.floor(pointerAngle / segmentAngle);
   const resultItem = items[resultIndex % items.length];
+  animationState.targetIndex = resultIndex % items.length;
   
   console.log('Animation calculation:', {
     resultItem,
@@ -220,6 +228,20 @@ function animate() {
     // ルーレット効果音停止 + 成功音再生
     audioManager.stopRoulette();
     audioManager.playSuccess();
+
+    // 結果を表示
+    const items = rouletteState.items;
+    if (items.length > 0) {
+      const segmentAngle = 360 / items.length;
+      const normalizedTargetRotation = ((rouletteState.targetRotation % 360) + 360) % 360;
+      const pointerAngle = (360 - normalizedTargetRotation) % 360;
+      const resultIndex = Math.floor(pointerAngle / segmentAngle) % items.length;
+      const resultItem = items[resultIndex];
+      const resultDisplay = document.getElementById('resultDisplay');
+      if (resultDisplay) {
+        resultDisplay.textContent = `結果: ${resultItem}`;
+      }
+    }
     
     // UIを更新してボタン状態を反映
     updateUI();
@@ -242,7 +264,7 @@ function updateWheel() {
   
   const segmentAngle = 360 / rouletteState.items.length;
   
-  // グラデーション背景を作成
+  // グラデーション背景を作成（標準の0deg起点に戻す）
   let gradient = 'conic-gradient(from 0deg';
   rouletteState.items.forEach((item, index) => {
     const color = WHEEL_COLORS[index % WHEEL_COLORS.length];

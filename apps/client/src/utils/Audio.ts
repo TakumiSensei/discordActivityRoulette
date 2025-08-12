@@ -17,16 +17,16 @@ class AudioManager {
     this.bgm = new Audio(bgmUrl);
     this.bgm.loop = true;
     this.bgm.preload = 'auto';
-    this.bgm.volume = 0.1; // 音量を下げる
+    this.bgm.volume = 0.05; // 音量を下げる
 
     this.roulette = new Audio(rouletteUrl);
     this.roulette.loop = true; // 回転中はループ
     this.roulette.preload = 'auto';
-    this.roulette.volume = 0.1; // 音量を下げる
+    this.roulette.volume = 0.05; // 音量を下げる
 
     this.success = new Audio(successUrl);
     this.success.preload = 'auto';
-    this.success.volume = 0.1; // 音量を下げる
+    this.success.volume = 0.05; // 音量を下げる
 
     this.initialized = true;
   }
