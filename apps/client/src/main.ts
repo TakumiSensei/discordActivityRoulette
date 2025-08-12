@@ -62,9 +62,8 @@ function initializeRoulette() {
   const app = document.querySelector('#app');
   if (!app) return;
   
-  // オーディオ初期化と自動再生セットアップ（ユーザー初回操作でBGM開始）
+  // オーディオ初期化。BGMは接続完了時に開始する。
   audioManager.init();
-  audioManager.setupAutoStart();
 
   app.innerHTML = `
     <div class="main-content">
@@ -421,6 +420,13 @@ async function main() {
       rouletteState.targetRotation = 0; // 初期状態では0に設定
     }
     updateUI();
+
+    // 接続完了後にBGM開始
+    try {
+      await audioManager.startBGM();
+    } catch (err) {
+      console.warn('BGM 再生開始に失敗しました（ブラウザの自動再生制限など）:', err);
+    }
   }
 }
 

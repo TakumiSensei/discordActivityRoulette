@@ -5,7 +5,7 @@ class AudioManager {
   private roulette: NullableAudio = null;
   private success: NullableAudio = null;
   private initialized = false;
-  private autoStartBound = false;
+  private autoStartBound = false; // 互換のため残すが未使用
 
   init() {
     if (this.initialized) return;
@@ -17,34 +17,22 @@ class AudioManager {
     this.bgm = new Audio(bgmUrl);
     this.bgm.loop = true;
     this.bgm.preload = 'auto';
+    this.bgm.volume = 0.5; // 音量を半分に
 
     this.roulette = new Audio(rouletteUrl);
     this.roulette.loop = true; // 回転中はループ
     this.roulette.preload = 'auto';
+    this.roulette.volume = 0.5; // 音量を半分に
 
     this.success = new Audio(successUrl);
     this.success.preload = 'auto';
+    this.success.volume = 0.5; // 音量を半分に
 
     this.initialized = true;
   }
 
-  setupAutoStart() {
-    if (this.autoStartBound) return;
-    this.autoStartBound = true;
-
-    const starter = async () => {
-      document.removeEventListener('click', starter);
-      document.removeEventListener('keydown', starter);
-      try {
-        await this.startBGM();
-      } catch {
-        // 失敗しても無視（ユーザーが別操作で再開する可能性あり）
-      }
-    };
-
-    document.addEventListener('click', starter, { once: true });
-    document.addEventListener('keydown', starter, { once: true });
-  }
+  // 互換のためメソッドは残すが何もしない
+  setupAutoStart() {}
 
   async startBGM() {
     if (!this.bgm) return;
