@@ -3,6 +3,7 @@ import { colyseusSDK } from './utils/Colyseus.js';
 import { authenticate } from './utils/Auth.js';
 import type { Room } from "colyseus.js";
 import './style.css';
+import { audioManager } from './utils/Audio.js';
 
 const WHEEL_COLORS = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#a8e6cf', '#dcedc1'];
 
@@ -61,6 +62,10 @@ function initializeRoulette() {
   const app = document.querySelector('#app');
   if (!app) return;
   
+  // オーディオ初期化と自動再生セットアップ（ユーザー初回操作でBGM開始）
+  audioManager.init();
+  audioManager.setupAutoStart();
+
   app.innerHTML = `
     <div class="main-content">
       <div class="roulette-container">
@@ -125,6 +130,9 @@ function startAnimation() {
     return;
   }
   
+  // ルーレット効果音開始
+  audioManager.playRoulette();
+
   // targetRotationから結果の項目を計算
   // ルーレットのポインターは上向き（0度）に固定されている
   // 各セグメントは0度から始まって時計回りに配置されている
@@ -209,6 +217,10 @@ function animate() {
     animationState.isAnimating = false;
     animationState.currentRotation = animationState.endRotation;
     wheelContainer.style.transform = `rotate(${animationState.currentRotation}deg)`;
+    
+    // ルーレット効果音停止 + 成功音再生
+    audioManager.stopRoulette();
+    audioManager.playSuccess();
     
     // UIを更新してボタン状態を反映
     updateUI();
@@ -384,6 +396,8 @@ async function main() {
       } else if (!rouletteState.isSpinning && previousSpinning) {
         // スピン停止時
         animationState.isAnimating = false;
+        // 念のため効果音停止（アニメ完了時にも停止するが、状態停止側でも止めて安全に）
+        audioManager.stopRoulette();
         updateUI(); // UIを更新してボタン状態を反映
       } else if (rouletteState.targetRotation !== previousTargetRotation && rouletteState.isSpinning) {
         // 目標回転角が変更された時
