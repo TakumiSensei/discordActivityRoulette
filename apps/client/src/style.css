@@ -2,8 +2,8 @@ html, body { overflow: auto; margin: 0; padding: 0; font-family: Inter, system-u
 canvas { display: block; }
 
 /* コンテナ */
-.roulette-container { margin: 0.75rem 0.5rem; padding: 1rem; border-radius: 16px; background: linear-gradient(135deg, rgba(102,126,234,0.15) 0%, rgba(118,75,162,0.15) 100%); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255,255,255,0.05); max-width: 760px; width: 100%; backdrop-filter: blur(6px); }
-.roulette-title { font-size: 2.1em; margin-bottom: 0.5rem; color: #fff; letter-spacing: 0.02em; text-shadow: 0 0 10px rgba(255,255,255,0.05); }
+.roulette-container { margin: 0.75rem 0.5rem; padding: 0.5rem 1rem 1rem; border-radius: 16px; background: linear-gradient(135deg, rgba(102,126,234,0.15) 0%, rgba(118,75,162,0.15) 100%); border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255,255,255,0.05); max-width: 760px; width: 100%; backdrop-filter: blur(6px); }
+.roulette-title { font-size: 2.1em; margin-top: 0; margin-bottom: 0.5rem; color: #fff; letter-spacing: 0.02em; text-shadow: 0 0 10px rgba(255,255,255,0.05); }
 .result-display { font-size: 1.25em; font-weight: 700; margin: 0.4rem 0 0.6rem; padding: 0.5rem 0.8rem; background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04)); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; color: #fff; min-height: 40px; display: flex; align-items: center; justify-content: center; gap: .5rem; }
 
 /* 入力とボタン */
@@ -33,7 +33,7 @@ canvas { display: block; }
 
 /* 画面が低い場合はさらにコンパクトに */
 @media (max-height: 700px) {
-  .roulette-container { margin: 0.5rem 0.5rem; padding: 0.75rem; }
+  .roulette-container { margin: 0.5rem 0.5rem; padding: 0.375rem 0.75rem 0.75rem; }
   .result-display { margin: 0.35rem 0 0.5rem; padding: 0.45rem 0.7rem; min-height: 36px; }
   .wheel-section { margin: 0.4rem auto; transform: scale(0.95); transform-origin: top center; }
   .items-list { max-height: 100px; }
