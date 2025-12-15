@@ -6,12 +6,14 @@ import './style.css';
 import { audioManager } from './utils/Audio.js';
 
 const WHEEL_COLORS = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#a8e6cf', '#dcedc1'];
+const HISTORY_LIMIT = 10;
 
 // ルーレット状態
 interface RouletteState {
   items: string[];
   isSpinning: boolean;
   targetRotation: number; // サーバーから送られた目標回転角
+  history: string[][];
 }
 
 // アニメーション状態
@@ -29,7 +31,8 @@ let room: Room<any> | null = null;
 let rouletteState: RouletteState = {
   items: [],
   isSpinning: false,
-  targetRotation: 0
+  targetRotation: 0,
+  history: []
 };
 
 let animationState: AnimationState = {
@@ -66,24 +69,33 @@ function initializeRoulette() {
   audioManager.init();
 
   app.innerHTML = `
-    <div class="main-content">
-      <div class="roulette-container">
-        <h2 class="roulette-title">🎯 ランダムルーレット</h2>
-        <div class="result-display" id="resultDisplay"></div>
-        <div class="wheel-section">
-          <div class="wheel-pointer"></div>
-          <div class="wheel-container" id="wheelContainer"></div>
-        </div>
-        <div class="input-section">
-          <div class="input-group">
-            <input type="text" id="itemInput" placeholder="項目を入力してください" />
-            <button class="add-button" id="addButton">追加</button>
+    <div class="page">
+      <div class="main-content">
+        <div class="roulette-container">
+          <h2 class="roulette-title">🎯 ランダムルーレット</h2>
+          <div class="result-display" id="resultDisplay"></div>
+          <div class="wheel-section">
+            <div class="wheel-pointer"></div>
+            <div class="wheel-container" id="wheelContainer"></div>
           </div>
-          <div class="items-list" id="itemsList"></div>
-          <button class="spin-button" id="spinButton" disabled>
-            🎲 ルーレットを回す
-          </button>
+          <div class="input-section">
+            <div class="input-group">
+              <input type="text" id="itemInput" placeholder="項目を入力してください" />
+              <button class="add-button" id="addButton">追加</button>
+            </div>
+            <div class="items-list" id="itemsList"></div>
+            <button class="spin-button" id="spinButton" disabled>
+              🎲 ルーレットを回す
+            </button>
+          </div>
         </div>
+        <aside class="history-container">
+          <div class="history-header">
+            <h3 class="history-title">📜 履歴</h3>
+            <p class="history-subtitle">最大${HISTORY_LIMIT}件。クリックで復元。</p>
+          </div>
+          <div class="history-list" id="historyList"></div>
+        </aside>
       </div>
     </div>
   `;
@@ -336,6 +348,49 @@ function updateItemsList() {
   });
 }
 
+function applyHistoryEntry(index: number) {
+  if (!room) return;
+  if (rouletteState.isSpinning || animationState.isAnimating) return;
+  const entry = rouletteState.history[index];
+  if (!entry) return;
+
+  room.send("apply_history", { items: entry });
+}
+
+function updateHistoryList() {
+  const historyList = document.getElementById('historyList') as HTMLElement | null;
+  if (!historyList) return;
+
+  if (!rouletteState.history.length) {
+    historyList.innerHTML = '<div class="history-empty">まだ履歴がありません。ルーレットを回すと履歴に残ります。</div>';
+    return;
+  }
+
+  historyList.innerHTML = rouletteState.history.map((items, index) => {
+    const chips = items.map((item) => `<span class="history-chip">${item}</span>`).join('');
+    const label = index === 0 ? '最新' : `${index + 1}件前`;
+    return `
+      <button class="history-entry" data-index="${index}" ${rouletteState.isSpinning || animationState.isAnimating ? 'disabled' : ''}>
+        <div class="history-entry__meta">
+          <span class="history-entry__label">${label}</span>
+          <span class="history-entry__count">${items.length} 件</span>
+        </div>
+        <div class="history-entry__items">
+          ${chips || '<span class="history-chip history-chip--empty">項目なし</span>'}
+        </div>
+      </button>
+    `;
+  }).join('');
+
+  historyList.querySelectorAll('.history-entry').forEach(node => {
+    node.addEventListener('click', (event) => {
+      const target = event.currentTarget as HTMLElement;
+      const idx = Number(target.getAttribute('data-index'));
+      applyHistoryEntry(idx);
+    });
+  });
+}
+
 function updateSpinButton() {
   const spinButton = document.getElementById('spinButton') as HTMLButtonElement | null;
   if (!spinButton) return;
@@ -360,6 +415,7 @@ function updateUI() {
     updateWheel();
   }
   updateItemsList();
+  updateHistoryList();
   updateSpinButton();
 }
 
@@ -403,6 +459,9 @@ async function main() {
       rouletteState.items = Array.from(state.roulette.items || []);
       rouletteState.isSpinning = state.roulette.isSpinning;
       rouletteState.targetRotation = state.roulette.targetRotation; // サーバーから目標回転角を取得
+      const historyEntries = Array.from(state.roulette.history || []);
+      historyEntries.reverse(); // 最新が先頭になるように並べ替え
+      rouletteState.history = historyEntries.map((entry: any) => Array.from(entry.items || []));
       
       // UIを更新
       updateUI();
@@ -435,11 +494,15 @@ async function main() {
       rouletteState.items = Array.from(room.state.roulette.items || []);
       rouletteState.isSpinning = room.state.roulette.isSpinning;
       rouletteState.targetRotation = room.state.roulette.targetRotation; // サーバーから目標回転角を取得
+      const historyEntries = Array.from(room.state.roulette.history || []);
+      historyEntries.reverse(); // 最新が先頭になるように並べ替え
+      rouletteState.history = historyEntries.map((entry: any) => Array.from(entry.items || []));
     } catch (error) {
       console.log('Initial state not available yet:', error);
       rouletteState.items = [];
       rouletteState.isSpinning = false;
       rouletteState.targetRotation = 0; // 初期状態では0に設定
+      rouletteState.history = [];
     }
     updateUI();
 

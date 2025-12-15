@@ -13,11 +13,17 @@ export class Player extends Schema {
   @type(Vec2) position = new Vec2();
 }
 
+export class RouletteHistoryEntry extends Schema {
+  @type(["string"]) items = new ArraySchema<string>();
+  @type("number") createdAt: number = Date.now();
+}
+
 // ルーレット用の状態
 export class RouletteState extends Schema {
   @type(["string"]) items = new ArraySchema<string>();
   @type("boolean") isSpinning: boolean = false;
   @type("number") targetRotation: number = 0; // 目標回転角
+  @type([RouletteHistoryEntry]) history = new ArraySchema<RouletteHistoryEntry>();
 }
 
 // export class MyRoomState extends Schema {
@@ -31,12 +37,30 @@ export class MyRoomState extends Schema {
 export class MyRoom extends Room<MyRoomState> {
   state = new MyRoomState();
   maxClients = 4;
+  private static readonly HISTORY_LIMIT = 10;
 
   static onAuth(token: string) {
     return JWT.verify(token);
   }
 
   onCreate (options: any) {
+    const addHistorySnapshot = () => {
+      if (this.state.roulette.items.length === 0) {
+        return;
+      }
+      const entry = new RouletteHistoryEntry();
+      entry.createdAt = Date.now();
+
+      // 先に履歴に追加して親/rootをセットし、その後アイテムをコピーする
+      this.state.roulette.history.push(entry);
+      this.state.roulette.items.forEach((item) => entry.items.push(item));
+
+      // 古いものから削除して最大件数を維持
+      while (this.state.roulette.history.length > MyRoom.HISTORY_LIMIT) {
+        this.state.roulette.history.shift();
+      }
+    };
+
     // ルーレット項目追加
     this.onMessage("add_item", (client, message) => {
       const item = message.item?.trim();
@@ -52,17 +76,38 @@ export class MyRoom extends Room<MyRoomState> {
         this.state.roulette.items.splice(idx, 1);
       }
     });
+    // 履歴の項目を現在のルーレットに適用
+    this.onMessage("apply_history", (client, message) => {
+      if (this.state.roulette.isSpinning) return;
+      const incomingItems: any[] = Array.isArray(message.items) ? message.items : [];
+      const uniqueItems: string[] = [];
+
+      incomingItems.forEach((raw) => {
+        const trimmed = String(raw ?? "").trim();
+        if (trimmed && !uniqueItems.includes(trimmed)) {
+          uniqueItems.push(trimmed);
+        }
+      });
+
+      this.state.roulette.items.splice(0, this.state.roulette.items.length);
+      uniqueItems.forEach((item) => this.state.roulette.items.push(item));
+
+      this.state.roulette.isSpinning = false;
+      this.state.roulette.targetRotation = 0;
+    });
     // ルーレット回転
     this.onMessage("spin", (client, message) => {
       if (this.state.roulette.isSpinning || this.state.roulette.items.length === 0) return;
-      
+
       // 目標回転角を生成（0-360度の範囲）
       const targetRotation = Math.floor(Math.random() * 360);
-      
+
+      addHistorySnapshot();
+
       // 目標回転角を即座に設定
       this.state.roulette.targetRotation = targetRotation;
       this.state.roulette.isSpinning = true;
-      
+
       console.log(`Roulette spin: target rotation: ${targetRotation}°`);
       
       // アニメーション時間に合わせて5秒後に停止

@@ -5,6 +5,9 @@ import { auth, JWT } from "@colyseus/auth";
 import express from "express";
 import cors from "cors";
 
+// JWT署名キー: 未指定なら開発用のデフォルトをセット
+JWT.settings.secret = process.env.JWT_SECRET || "dev-secret-change-me";
+
 /**
  * Import your Room files
  */
@@ -25,6 +28,9 @@ export default config({
             origin: true,
             credentials: true
         }));
+        // JSON / form ボディをパース（/discord_token で必要）
+        app.use(express.json());
+        app.use(express.urlencoded({ extended: true }));
         
         // 静的ファイル配信を追加
         app.use(express.static("public"));
@@ -40,10 +46,16 @@ export default config({
         // Discord Embedded SDK: Retrieve user token when under Discord/Embed
         //
         app.post(["/discord_token", "/colyseus/discord_token"], async (req, res) => {
+          const code = req.body?.code;
+          if (!code) {
+            res.status(400).send({ error: "missing code" });
+            return;
+          }
+
           //
           // TODO: remove this on production
           //
-          if (req.body.code === "mock_code") {
+          if (code === "mock_code") {
             const user = {
               id: Math.random().toString(36).slice(2, 10),
               username: `User ${Math.random().toString().slice(2, 10)}`,
@@ -65,7 +77,7 @@ export default config({
                 client_id: process.env.DISCORD_CLIENT_ID,
                 client_secret: process.env.DISCORD_CLIENT_SECRET,
                 grant_type: 'authorization_code',
-                code: req.body.code,
+                code,
               }),
             });
 
