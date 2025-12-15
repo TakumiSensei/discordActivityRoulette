@@ -1,6 +1,7 @@
 import { JWT } from "@colyseus/auth";
 import { Room, Client } from "@colyseus/core";
 import { Schema, MapSchema, type, ArraySchema } from "@colyseus/schema";
+import { createHistoryStore, type PersistedHistoryEntry } from "../utils/historyStore";
 
 export class Vec2 extends Schema {
   @type("number") x: number;
@@ -38,12 +39,20 @@ export class MyRoom extends Room<MyRoomState> {
   state = new MyRoomState();
   maxClients = 4;
   private static readonly HISTORY_LIMIT = 10;
+  private historyStore = createHistoryStore();
+  private historyKey: string | null = null;
 
   static onAuth(token: string) {
     return JWT.verify(token);
   }
 
   onCreate (options: any) {
+    this.historyKey = options?.channelId ? String(options.channelId) : null;
+
+    if (this.historyKey) {
+      this.loadPersistedHistory(this.historyKey);
+    }
+
     const addHistorySnapshot = () => {
       if (this.state.roulette.items.length === 0) {
         return;
@@ -59,6 +68,8 @@ export class MyRoom extends Room<MyRoomState> {
       while (this.state.roulette.history.length > MyRoom.HISTORY_LIMIT) {
         this.state.roulette.history.shift();
       }
+
+      this.persistHistory();
     };
 
     // ルーレット項目追加
@@ -136,6 +147,39 @@ export class MyRoom extends Room<MyRoomState> {
 
   onDispose() {
     console.log("room", this.roomId, "disposing...");
+  }
+
+  private async loadPersistedHistory(key: string) {
+    try {
+      const persisted = await this.historyStore.load(key);
+      if (!Array.isArray(persisted) || persisted.length === 0) {
+        return;
+      }
+      this.replaceHistory(persisted);
+      console.log(`Loaded ${persisted.length} history entries for key ${key}`);
+    } catch (err) {
+      console.warn("Failed to load persisted roulette history:", err);
+    }
+  }
+
+  private persistHistory() {
+    if (!this.historyKey) return;
+    const payload: PersistedHistoryEntry[] = this.state.roulette.history.map((entry) => ({
+      createdAt: entry.createdAt || Date.now(),
+      items: Array.from(entry.items || []),
+    }));
+    this.historyStore.save(this.historyKey, payload)
+      .catch((err) => console.warn("Failed to persist roulette history:", err));
+  }
+
+  private replaceHistory(entries: PersistedHistoryEntry[]) {
+    this.state.roulette.history.splice(0, this.state.roulette.history.length);
+    entries.slice(-MyRoom.HISTORY_LIMIT).forEach((data) => {
+      const entry = new RouletteHistoryEntry();
+      entry.createdAt = data.createdAt || Date.now();
+      (data.items || []).forEach((item) => entry.items.push(item));
+      this.state.roulette.history.push(entry);
+    });
   }
 
 }
