@@ -25,6 +25,7 @@
   },
   "homepage": "https://github.com/colyseus/discord-embedded-app-sdk#readme",
   "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0",
     "cloudflared": "^0.5.1",
     "typescript": "^5.8.2",
     "vite": "^6.2.0"
@@ -33,6 +34,7 @@
     "@discord/embedded-app-sdk": "^1.9.0",
     "@pixi/tilemap": "^5.0.1",
     "@tweenjs/tween.js": "^23.1.1",
+    "canvas-confetti": "^1.9.4",
     "colyseus.js": "^0.16.0",
     "pixi.js": "^8.1.0"
   }

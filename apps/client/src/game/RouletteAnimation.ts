@@ -1,4 +1,5 @@
 import { audioManager } from '../utils/Audio.js';
+import confetti from 'canvas-confetti';
 
 export interface AnimationOptions {
   duration?: number;
@@ -108,21 +109,22 @@ export class RouletteAnimation {
     audioManager.stopRoulette();
     audioManager.playSuccess();
 
+    // Fire confetti!
+    confetti({
+      particleCount: 150,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors: ['#ff6b81', '#7bed9f', '#eccc68', '#ff7f50', '#ffffff'] // Match theme colors
+    });
+
     if (this.onCompleteCallback) {
       this.onCompleteCallback();
     }
   }
 
-  // 自然なイージング関数（シンプルな加速→減速）
+  // Exciting easing: Start fast, slow down gradually (OutQuart/OutQuint style)
   private naturalEase(t: number): number {
-    if (t < 0.5) {
-      // 加速段階 (0-50%): 滑らかな加速
-      const normalizedT = t / 0.5;
-      return Math.pow(normalizedT, 3) * 0.5;
-    } else {
-      // 減速段階 (50-100%): 滑らかな減速
-      const normalizedT = (t - 0.5) / 0.5;
-      return 0.5 + (1 - Math.pow(1 - normalizedT, 3)) * 0.5;
-    }
+    // easeOutQuart
+    return 1 - Math.pow(1 - t, 4);
   }
 }
