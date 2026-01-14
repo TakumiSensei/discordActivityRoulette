@@ -30,7 +30,8 @@ export class RouletteGame {
             onAddItem: (item: string) => this.addItem(item),
             onRemoveItem: (item: string) => this.removeItem(item),
             onSpin: () => this.spin(),
-            onHistoryClick: (index: number) => this.applyHistory(index)
+            onHistoryClick: (index: number) => this.applyHistory(index),
+            onClearItems: () => this.clearItems()
         });
 
         this.animation = new RouletteAnimation(() => this.ui.getWheelElement());
@@ -132,7 +133,7 @@ export class RouletteGame {
     }
 
     private startAnimation() {
-        this.ui.clearResult();
+        this.ui.displayResult("回転中...");
 
         // Calculate start rotation (current visual rotation)
         const currentRotation = this.animation.currentRotation;
@@ -164,9 +165,9 @@ export class RouletteGame {
     private updateUI() {
         const isProcessing = this.state.isSpinning || this.animation.isAnimating;
 
-        this.ui.updateWheel(this.state.items, this.animation.isAnimating);
-        this.ui.updateItemsList(this.state.items);
-        this.ui.updateHistoryList(this.state.history, isProcessing);
+        this.ui.renderWheel(this.state.items, this.animation.isAnimating);
+        this.ui.renderItemsList(this.state.items);
+        this.ui.renderHistory(this.state.history, isProcessing);
 
         const canSpin = this.state.items.length > 0 && !isProcessing;
         this.ui.updateSpinButton(canSpin, isProcessing);
@@ -175,7 +176,14 @@ export class RouletteGame {
     // --- Actions ---
 
     private addItem(item: string) {
-        if (item && !this.state.items.includes(item) && this.room) {
+        if (!item) return;
+
+        if (this.state.items.includes(item)) {
+            this.ui.showNotification("既に追加済のアイテムです");
+            return;
+        }
+
+        if (this.room) {
             this.room.send("add_item", { item });
             this.ui.clearInput();
         }
@@ -198,6 +206,12 @@ export class RouletteGame {
         const entry = this.state.history[index];
         if (entry) {
             this.room.send("apply_history", { items: entry });
+        }
+    }
+
+    private clearItems() {
+        if (this.room) {
+            this.room.send("clear_items", {});
         }
     }
 }

@@ -46,7 +46,7 @@ export class MyRoom extends Room<MyRoomState> {
     return JWT.verify(token);
   }
 
-  onCreate (options: any) {
+  onCreate(options: any) {
     this.historyKey = options?.channelId ? String(options.channelId) : null;
 
     if (this.historyKey) {
@@ -87,6 +87,10 @@ export class MyRoom extends Room<MyRoomState> {
         this.state.roulette.items.splice(idx, 1);
       }
     });
+    // ルーレット全項目クリア
+    this.onMessage("clear_items", (client, message) => {
+      this.state.roulette.items.splice(0, this.state.roulette.items.length);
+    });
     // 履歴の項目を現在のルーレットに適用
     this.onMessage("apply_history", (client, message) => {
       if (this.state.roulette.isSpinning) return;
@@ -120,7 +124,7 @@ export class MyRoom extends Room<MyRoomState> {
       this.state.roulette.isSpinning = true;
 
       console.log(`Roulette spin: target rotation: ${targetRotation}°`);
-      
+
       // アニメーション時間に合わせて5秒後に停止
       setTimeout(() => {
         this.state.roulette.isSpinning = false;
@@ -129,7 +133,7 @@ export class MyRoom extends Room<MyRoomState> {
     });
   }
 
-  onJoin (client: Client, options: any) {
+  onJoin(client: Client, options: any) {
     console.log(client.sessionId, "joined!");
     // プレイヤー管理は一旦コメントアウト
     // const player = new Player();
@@ -140,7 +144,7 @@ export class MyRoom extends Room<MyRoomState> {
     // this.state.players.set(client.sessionId, player);
   }
 
-  onLeave (client: Client, consented: boolean) {
+  onLeave(client: Client, consented: boolean) {
     console.log(client.sessionId, "left!");
     // this.state.players.delete(client.sessionId);
   }
