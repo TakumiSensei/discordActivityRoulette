@@ -177,11 +177,22 @@ npm run cloudflared
 このリポジトリには Cloud Run 用の `Dockerfile` と `cloudbuild.yaml` が含まれます。
 
 ### Dockerfile（概要）
-1. クライアントをビルド → 成果物をサーバの `public/` に配置
-2. サーバをビルド
-3. 軽量イメージで `npm start`（ポート `2567` を公開）
+1. ルートの `package-lock.json` と両workspaceの `package.json` をコピーし、`npm ci --include=dev` で依存関係を固定してインストール
+2. クライアント・サーバをそれぞれビルド
+3. クライアントの成果物をサーバの `public/` に配置し、ルートの `node_modules` とサーバのビルド成果物を実行用イメージへコピー
+4. `node build/index.js` で起動（Cloud Run の `PORT` を使用、未指定時は `2567`）
 
 ビルド引数 `VITE_DISCORD_CLIENT_ID` を使用してクライアントをビルドします。
+
+Dockerのビルドコンテキストはリポジトリのルートを指定してください。
+
+```bash
+docker build --build-arg VITE_DISCORD_CLIENT_ID=YOUR_CLIENT_ID -t discord-activity .
+```
+
+各アプリでロックファイルなしの `npm install` を行うと、ローカルとは異なる推移依存が選ばれます。2026-09-06の失敗はサーバ依存のインストール段階で発生し、同条件で `@colyseus/core@0.16.25` の依存定義による `Unsupported URL Type "workspace:": workspace:^` を再現しました。ルートのロックファイルでは動作確認済みの `0.16.10` に固定されています。依存更新時はルートの `package-lock.json` も更新し、クリーンな `npm ci` と両アプリのビルドを確認してください。
+
+`.dockerignore` により、ローカルの `node_modules`・ビルド成果物・`.env` はイメージへ持ち込みません。Discord OAuthのシークレットなどはCloud Run側で設定してください。
 
 ### Cloud Build
 `cloudbuild.yaml` の `substitutions._VITE_DISCORD_CLIENT_ID` を適切な値に変更してください。
