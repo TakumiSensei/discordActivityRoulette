@@ -4,6 +4,7 @@ export interface RouletteUIOptions {
   onSpin: () => void;
   onHistoryClick: (index: number) => void;
   onClearItems: () => void;
+  onToggleSound: () => void;
 }
 
 export class RouletteUI {
@@ -11,7 +12,10 @@ export class RouletteUI {
   private static readonly WHEEL_COLORS = [
     '#FCA5A5', '#FDBA74', '#FCD34D', '#86EFAC', '#93C5FD', '#C4B5FD', '#F9A8D4', '#FDA4AF'
   ];
-  private static readonly HISTORY_LIMIT = 10;
+  private itemsKey = '';
+  private historyKey = '';
+  private wheelKey = '';
+  private editingDisabled = true;
 
   constructor(
     private rootSelector: string,
@@ -26,6 +30,10 @@ export class RouletteUI {
       <div class="app-layout">
         <!-- Game Stage (Left) -->
         <main class="game-stage">
+            <header class="stage-header">
+                <div><h1>みんなのルーレット</h1><p id="connectionStatus" role="status">接続中…</p></div>
+                <button class="sound-btn" id="soundButton" aria-pressed="true">♪ 音 ON</button>
+            </header>
             <!-- Clouds -->
             <div class="cloud c1"></div>
             <div class="cloud c2"></div>
@@ -42,8 +50,8 @@ export class RouletteUI {
                     <div class="nail br"></div>
                     
                     <span class="sign-label">結果</span>
-                    <div class="sign-value" id="resultDisplay">
-                        準備完了
+                    <div class="sign-value" id="resultDisplay" role="status" aria-live="polite">
+                        項目を追加しよう
                     </div>
                 </div>
             </div>
@@ -55,9 +63,9 @@ export class RouletteUI {
                 </div>
                 
                 <div class="wheel-frame">
-                    <div class="wheel-inner" id="wheelInner"></div>
+                    <div class="wheel-inner" id="wheelInner" role="img" aria-label="ルーレット：項目なし"></div>
                     <div class="wheel-center">
-                        <div class="wheel-axle"></div>
+                        <span id="wheelCount" aria-hidden="true">0</span>
                     </div>
                 </div>
             </div>
@@ -65,8 +73,9 @@ export class RouletteUI {
             <!-- Start Button -->
             <button class="start-btn" id="spinButton" disabled>
                 <div id="btnSpinnerIcon" style="display: none; margin-right: 0.5rem;">${this.getIcon('cached', 28)}</div>
-                スタート
+                <span id="spinButtonLabel">ルーレットを回す</span>
             </button>
+            <p class="stage-hint" id="stageHint">右のリストに候補を追加して、みんなで抽選！</p>
 
             <!-- Ground -->
             <div class="ground-section">
@@ -80,11 +89,11 @@ export class RouletteUI {
         <!-- UI Panel (Right) -->
         <aside class="ui-panel">
             <!-- Inventory Card -->
-            <div class="glass-card" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+            <section class="glass-card items-card" aria-labelledby="itemsHeading">
                 <div class="card-header">
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                         <div style="color: #EC4899;">${this.getIcon('playlist_add_check', 28)}</div>
-                        <h3 style="margin:0; font-weight: 700;">アイテムリスト</h3>
+                        <h2 id="itemsHeading">抽選する項目</h2>
                     </div>
                     <span class="header-badge" id="itemCountBadge">0 個</span>
                 </div>
@@ -92,35 +101,32 @@ export class RouletteUI {
                 <div class="input-group">
                     <div class="input-field-wrapper">
                         <div class="input-icon">${this.getIcon('edit', 20)}</div>
-                        <input class="input-field" id="itemInput" placeholder="項目を入力..." type="text"/>
+                        <input class="input-field" id="itemInput" aria-label="追加する項目" placeholder="候補を入力して Enter" type="text" disabled/>
                     </div>
-                    <button class="icon-btn add" id="addButton">
+                    <button class="icon-btn add" id="addButton" aria-label="項目を追加" title="項目を追加" disabled>
                         ${this.getIcon('add', 28)}
                     </button>
                 </div>
 
-                <div class="scroll-list custom-scrollbar" id="itemsList" style="flex: 1; overflow-y: auto;">
+                <div class="scroll-list custom-scrollbar" id="itemsList" role="list" aria-label="追加済み項目">
                     <!-- Items go here -->
                 </div>
 
-                <div class="panel-footer" style="padding-top: 1rem; margin-top: auto;">
-                    <button class="text-btn danger" id="clearButton" style="margin-left: auto;">
-                       ${this.getIcon('delete_sweep', 20)} <span style="margin-left:4px;">クリア</span>
+                <div class="panel-footer">
+                    <span class="panel-note" id="editStatus">全員で追加・削除できます</span>
+                    <button class="text-btn danger" id="clearButton" disabled>
+                       ${this.getIcon('delete_sweep', 20)} <span>すべて削除</span>
                     </button>
                 </div>
-            </div>
+            </section>
 
-                <div class="glass-card" style="height: 500px; flex: none; display: flex; flex-direction: column;">
-                    <div class="card-header">
-                         <div style="display: flex; align-items: center; gap: 0.5rem; color: #64748B;">
-                            ${this.getIcon('history', 24)}
-                            <span style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">履歴</span>
-                        </div>
-                    </div>
-                    <div class="scroll-list custom-scrollbar" id="historyList">
+                <details class="glass-card history-card" open>
+                    <summary>${this.getIcon('history', 24)} <span>履歴から復元</span><span class="history-count" id="historyCount">0 件</span></summary>
+                    <p class="panel-note">抽選時・全削除前・復元前のセットを保存（最新10件）</p>
+                    <div class="scroll-list custom-scrollbar" id="historyList" aria-label="項目セットの履歴">
                          <!-- History items -->
                     </div>
-                </div>
+                </details>
             </aside>
           </div>
         `;
@@ -132,9 +138,14 @@ export class RouletteUI {
     return document.getElementById('wheelInner');
   }
 
-  public renderWheel(items: string[], isAnimating: boolean) {
+  public renderWheel(items: string[]) {
     const wheelInner = document.getElementById('wheelInner');
     if (!wheelInner) return;
+    const key = JSON.stringify(items);
+    if (key === this.wheelKey) return;
+    this.wheelKey = key;
+    wheelInner.setAttribute('aria-label', `ルーレット：${items.length}項目`);
+    document.getElementById('wheelCount')!.textContent = String(items.length);
 
     if (items.length === 0) {
       wheelInner.style.background = 'conic-gradient(#cbd5e1 0deg 360deg)';
@@ -169,9 +180,10 @@ export class RouletteUI {
       label.style.lineHeight = '20px';
       label.style.textAlign = 'right';
       label.style.paddingRight = '24px'; // Increased padding for larger text
+      label.style.paddingLeft = '42px';
       label.style.color = '#1e293b'; // Slate 800
       label.style.fontWeight = '800'; // Bolder
-      label.style.fontSize = '1.1rem'; // Larger font
+      label.style.fontSize = items.length > 12 ? '0.75rem' : '0.95rem';
       label.style.whiteSpace = 'nowrap';
       label.style.overflow = 'hidden';
       label.style.textOverflow = 'ellipsis';
@@ -194,24 +206,28 @@ export class RouletteUI {
     const itemsList = document.getElementById('itemsList');
     const badge = document.getElementById('itemCountBadge');
     if (itemsList) {
+      const key = JSON.stringify(items);
+      if (key === this.itemsKey) return;
+      this.itemsKey = key;
       if (badge) badge.textContent = `${items.length} 個`;
 
       if (items.length === 0) {
-        itemsList.innerHTML = '<div style="text-align:center; color:#94A3B8; padding: 1rem; font-size: 0.875rem;">アイテムを追加してください</div>';
+        itemsList.innerHTML = '<div class="empty-state"><strong>何を当てる？</strong><span>名前やゲーム、お題などを追加しよう。<br>追加した項目はここで削除できます。</span></div>';
       } else {
-        itemsList.innerHTML = items.map(item => `
-                <div class="list-item" style="display:flex; justify-content:space-between; align-items:center; padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                    <span style="flex:1; overflow:hidden; text-overflow:ellipsis; margin-right: 0.5rem; font-weight: 500;">${item}</span>
-                    <button class="icon-btn danger sm delete-item-btn" data-value="${item}" style="width: 24px; height: 24px; min-width: 24px;">
-                        ${this.getIcon('close', 16)}
+        itemsList.innerHTML = items.map((item, index) => `
+                <div class="list-item" role="listitem">
+                    <span class="item-number" style="background:${RouletteUI.WHEEL_COLORS[index % RouletteUI.WHEEL_COLORS.length]}">${index + 1}</span>
+                    <span class="item-name" title="${this.escapeHTML(item)}">${this.escapeHTML(item)}</span>
+                    <button class="icon-btn danger delete-item-btn" data-index="${index}" aria-label="${this.escapeHTML(item)}を削除" title="この項目を削除">
+                        ${this.getIcon('close', 20)}
                     </button>
                 </div>
             `).join('');
 
         itemsList.querySelectorAll('.delete-item-btn').forEach(btn => {
           btn.addEventListener('click', (e) => {
-            const val = (e.currentTarget as HTMLElement).getAttribute('data-value');
-            if (val) this.options.onRemoveItem(val);
+            const index = Number((e.currentTarget as HTMLElement).dataset.index);
+            if (!this.editingDisabled) this.options.onRemoveItem(items[index]);
           });
         });
       }
@@ -221,30 +237,34 @@ export class RouletteUI {
   public renderHistory(history: string[][], isSpinningOrAnimating: boolean) {
     const historyList = document.getElementById('historyList');
     if (!historyList) return;
+    const key = JSON.stringify([history, isSpinningOrAnimating]);
+    if (key === this.historyKey) return;
+    this.historyKey = key;
+    document.getElementById('historyCount')!.textContent = `${history.length} 件`;
 
     if (!history.length) {
-      historyList.innerHTML = '<div style="text-align:center; color:#94A3B8; padding: 1rem; font-size: 0.875rem;">履歴はありません</div>';
+      historyList.innerHTML = '<div class="empty-history">回すと、項目セットがここに保存されます</div>';
       return;
     }
 
     historyList.innerHTML = history.map((items, index) => {
-      const label = index === 0 ? '最新' : `${index} 回前`;
+      const label = index === 0 ? '最新' : `${index} 件前`;
       const itemCount = items.length;
       // REMOVED TRUNCATION HERE: Show all items joined by comma
       const preview = items.join(', ');
 
       return `
-        <button class="history-entry" data-index="${index}" ${isSpinningOrAnimating ? 'disabled' : ''} style="${isSpinningOrAnimating ? 'opacity: 0.5; cursor: not-allowed;' : ''}">
+        <button class="history-entry" data-index="${index}" ${isSpinningOrAnimating ? 'disabled' : ''} title="${this.escapeHTML(preview)}" aria-label="${label}の${itemCount}項目を復元">
             <div class="history-icon-box">
                 ${this.getIcon('save', 20)}
             </div>
             <div style="flex: 1; overflow: hidden;">
                 <div style="font-weight: 700; font-size: 0.875rem;">${label} (${itemCount}個)</div>
-                <div style="font-size: 0.75rem; color: #64748B; word-break: break-all; white-space: normal;">
-                    ${preview}
+                <div class="history-preview">
+                    ${this.escapeHTML(preview)}
                 </div>
             </div>
-            <span style="color: #94A3B8;">${this.getIcon('chevron_right', 24)}</span>
+            <span class="restore-label">復元</span>
         </button>
       `;
     }).join('');
@@ -264,6 +284,10 @@ export class RouletteUI {
     if (!spinButton) return;
 
     spinButton.disabled = !canSpin || isProcessing;
+    document.getElementById('spinButtonLabel')!.textContent = isProcessing ? '抽選中…' : 'ルーレットを回す';
+    document.getElementById('stageHint')!.textContent = isProcessing
+      ? '誰に当たるかな？ 結果を待とう！'
+      : '候補を追加して、みんなで抽選！';
 
     if (isProcessing) {
       if (btnSpinner) {
@@ -278,6 +302,31 @@ export class RouletteUI {
       }
       spinButton.style.cursor = canSpin ? 'pointer' : 'not-allowed';
     }
+  }
+
+  public updateEditing(disabled: boolean, hasItems: boolean) {
+    this.editingDisabled = disabled;
+    document.querySelectorAll<HTMLButtonElement | HTMLInputElement>('#itemInput, #addButton, .delete-item-btn')
+      .forEach(element => element.disabled = disabled);
+    (document.getElementById('clearButton') as HTMLButtonElement).disabled = disabled || !hasItems;
+    document.getElementById('editStatus')!.textContent = disabled ? '接続待ち・抽選中は編集できません' : '全員で追加・削除できます';
+  }
+
+  public updateConnection(connected: boolean, message?: string) {
+    const status = document.getElementById('connectionStatus')!;
+    status.textContent = message || (connected ? '● 同じルームのみんなと同期中' : '接続中…');
+    status.classList.toggle('connected', connected);
+  }
+
+  public updateSound(enabled: boolean) {
+    const button = document.getElementById('soundButton')!;
+    button.textContent = enabled ? '♪ 音 ON' : '♪ 音 OFF';
+    button.setAttribute('aria-pressed', String(enabled));
+    button.title = enabled ? 'BGM・効果音をミュート' : 'BGM・効果音を再生';
+  }
+
+  private escapeHTML(value: string): string {
+    return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]!));
   }
 
   private getIcon(name: string, size: number = 24, className: string = ''): string {
@@ -306,6 +355,7 @@ export class RouletteUI {
     if (resultDisplay) {
       const display = text ? text.replace('結果: ', '') : '準備完了';
       resultDisplay.textContent = display;
+      resultDisplay.title = display;
     }
 
     // Simple animation for the sign when result updates
@@ -328,6 +378,7 @@ export class RouletteUI {
   }
 
   private setupEventListeners() {
+    document.getElementById('soundButton')?.addEventListener('click', () => this.options.onToggleSound());
     const addButton = document.getElementById('addButton');
     if (addButton) {
       addButton.addEventListener('click', () => this.handleAddItem());
@@ -335,8 +386,9 @@ export class RouletteUI {
 
     const itemInput = document.getElementById('itemInput');
     if (itemInput) {
-      itemInput.addEventListener('keypress', (event: KeyboardEvent) => {
-        if (event.key === 'Enter') {
+      itemInput.addEventListener('keydown', (event: KeyboardEvent) => {
+        if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) {
+          event.preventDefault();
           this.handleAddItem();
         }
       });
@@ -355,7 +407,7 @@ export class RouletteUI {
 
   private handleAddItem() {
     const input = document.getElementById('itemInput') as HTMLInputElement | null;
-    if (!input) return;
+    if (!input || this.editingDisabled) return;
     const val = input.value.trim();
     if (val) {
       this.options.onAddItem(val);
@@ -370,8 +422,9 @@ export class RouletteUI {
     toast.className = 'notification-toast';
     toast.innerHTML = `
           ${this.getIcon('close', 20)}
-          <span>${message}</span>
+          <span>${this.escapeHTML(message)}</span>
       `;
+    toast.setAttribute('role', 'status');
 
     document.body.appendChild(toast);
 

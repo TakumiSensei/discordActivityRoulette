@@ -55,12 +55,16 @@ class FirestoreHistoryStore implements HistoryStore {
 }
 
 export function createHistoryStore(): HistoryStore {
+  if (process.env.HISTORY_STORE === 'memory') return memoryHistoryStore;
   try {
     const firestore = new Firestore();
     console.log("HistoryStore: Using Firestore-backed history store (auto-detected credentials/project).");
     return new FirestoreHistoryStore(firestore);
   } catch (err) {
     console.warn("HistoryStore: Failed to initialize Firestore. Falling back to in-memory store.", err);
-    return new MemoryHistoryStore();
+    return memoryHistoryStore;
   }
 }
+
+// Share development history between room instances for the lifetime of the process.
+const memoryHistoryStore = new MemoryHistoryStore();

@@ -2,6 +2,7 @@ import { JWT } from "@colyseus/auth";
 import { Room, Client } from "@colyseus/core";
 import { Schema, MapSchema, type, ArraySchema } from "@colyseus/schema";
 import { createHistoryStore, type PersistedHistoryEntry } from "../utils/historyStore";
+import { randomInt } from "node:crypto";
 
 export class Vec2 extends Schema {
   @type("number") x: number;
@@ -24,6 +25,9 @@ export class RouletteState extends Schema {
   @type(["string"]) items = new ArraySchema<string>();
   @type("boolean") isSpinning: boolean = false;
   @type("number") targetRotation: number = 0; // 目標回転角
+  @type("number") spinId: number = 0;
+  @type("number") spinStartedAt: number = 0;
+  @type("string") resultItem: string = "";
   @type([RouletteHistoryEntry]) history = new ArraySchema<RouletteHistoryEntry>();
 }
 
@@ -57,6 +61,8 @@ export class MyRoom extends Room<MyRoomState> {
       if (this.state.roulette.items.length === 0) {
         return;
       }
+      const latest = this.state.roulette.history[this.state.roulette.history.length - 1];
+      if (latest && JSON.stringify(Array.from(latest.items)) === JSON.stringify(Array.from(this.state.roulette.items))) return;
       const entry = new RouletteHistoryEntry();
       entry.createdAt = Date.now();
 
@@ -74,59 +80,74 @@ export class MyRoom extends Room<MyRoomState> {
 
     // ルーレット項目追加
     this.onMessage("add_item", (client, message) => {
-      const item = message.item?.trim();
+      if (this.state.roulette.isSpinning || typeof message?.item !== 'string') return;
+      const item = message.item.trim();
       if (item && !this.state.roulette.items.includes(item)) {
         this.state.roulette.items.push(item);
+        this.state.roulette.resultItem = '';
       }
     });
     // ルーレット項目削除
     this.onMessage("remove_item", (client, message) => {
+      if (this.state.roulette.isSpinning || typeof message?.item !== 'string') return;
       const item = message.item;
       const idx = this.state.roulette.items.indexOf(item);
       if (idx !== -1) {
         this.state.roulette.items.splice(idx, 1);
+        this.state.roulette.resultItem = '';
       }
     });
     // ルーレット全項目クリア
     this.onMessage("clear_items", (client, message) => {
+      if (this.state.roulette.isSpinning) return;
+      addHistorySnapshot();
       this.state.roulette.items.splice(0, this.state.roulette.items.length);
     });
     // 履歴の項目を現在のルーレットに適用
     this.onMessage("apply_history", (client, message) => {
-      if (this.state.roulette.isSpinning) return;
-      const incomingItems: any[] = Array.isArray(message.items) ? message.items : [];
+      if (this.state.roulette.isSpinning || !Array.isArray(message?.items)) return;
+      const incomingItems: unknown[] = message.items;
       const uniqueItems: string[] = [];
 
       incomingItems.forEach((raw) => {
-        const trimmed = String(raw ?? "").trim();
+        const trimmed = typeof raw === 'string' ? raw.trim() : '';
         if (trimmed && !uniqueItems.includes(trimmed)) {
           uniqueItems.push(trimmed);
         }
       });
 
+      if (!uniqueItems.length) return;
+      addHistorySnapshot();
       this.state.roulette.items.splice(0, this.state.roulette.items.length);
+      this.state.roulette.resultItem = '';
       uniqueItems.forEach((item) => this.state.roulette.items.push(item));
 
       this.state.roulette.isSpinning = false;
       this.state.roulette.targetRotation = 0;
+      this.state.roulette.resultItem = '';
     });
     // ルーレット回転
     this.onMessage("spin", (client, message) => {
       if (this.state.roulette.isSpinning || this.state.roulette.items.length === 0) return;
 
-      // 目標回転角を生成（0-360度の範囲）
-      const targetRotation = Math.floor(Math.random() * 360);
+      // 項目ごとに等確率で抽選し、境界を避けて当選セグメントの中央へ止める。
+      const winnerIndex = randomInt(this.state.roulette.items.length);
+      const segmentAngle = 360 / this.state.roulette.items.length;
+      const targetRotation = (360 - (winnerIndex + 0.5) * segmentAngle) % 360;
 
       addHistorySnapshot();
 
       // 目標回転角を即座に設定
       this.state.roulette.targetRotation = targetRotation;
+      this.state.roulette.resultItem = this.state.roulette.items[winnerIndex];
+      this.state.roulette.spinId += 1;
+      this.state.roulette.spinStartedAt = Date.now();
       this.state.roulette.isSpinning = true;
 
       console.log(`Roulette spin: target rotation: ${targetRotation}°`);
 
       // アニメーション時間に合わせて5秒後に停止
-      setTimeout(() => {
+      this.clock.setTimeout(() => {
         this.state.roulette.isSpinning = false;
         console.log(`Roulette stopped: target rotation ${this.state.roulette.targetRotation}°`);
       }, 5000);

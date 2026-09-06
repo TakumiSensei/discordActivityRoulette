@@ -30,7 +30,7 @@
   --color-primary-btn-hover: #7C3AED;
 
   /* Fonts */
-  --font-display: 'Fredoka', sans-serif;
+  --font-display: 'Fredoka', 'Yu Gothic UI', 'Meiryo', sans-serif;
   --font-icon: 'Material Icons Round';
 
   /* Utils */
@@ -50,8 +50,8 @@ body {
   font-family: var(--font-display);
   background-color: var(--color-sky-bottom);
   color: var(--color-text-main);
-  height: 100vh;
-  overflow: hidden;
+  min-height: 100dvh;
+  overflow-y: auto;
   user-select: none;
 }
 
@@ -79,7 +79,7 @@ body {
   width: 100%;
   max-width: 1600px;
   margin: 0 auto;
-  height: 100vh;
+  min-height: 100dvh;
   padding: 1rem;
   gap: 1.5rem;
 }
@@ -88,12 +88,16 @@ body {
   .app-layout {
     flex-direction: row;
     padding: 1.5rem;
+    height: 100dvh;
+    min-height: 760px;
   }
 }
 
 /* --- Game Stage (Left/Main) --- */
 .game-stage {
   flex: 1;
+  min-width: 0;
+  padding: 100px 20px 76px;
   position: relative;
   background: linear-gradient(to bottom, var(--color-sky-top), var(--color-sky-bottom));
   border-radius: 1.5rem;
@@ -209,9 +213,11 @@ body {
 
 /* --- Hanging Sign (Result) --- */
 .hanging-sign-container {
+  width: min(360px, 100%);
   position: relative;
   z-index: 10;
-  margin-bottom: 1rem;
+  margin-bottom: 1.75rem;
+  max-width: 100%;
   transform: rotate(-1deg);
   transition: transform 0.3s;
 }
@@ -238,8 +244,9 @@ body {
 }
 
 .sign-board {
-  width: 320px;
-  height: 100px;
+  width: 100%;
+  min-height: 100px;
+  padding: 12px 24px;
   background-color: var(--color-wood);
   /* Wood pattern */
   background-image: repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.05) 0px, rgba(0, 0, 0, 0.05) 2px, transparent 2px, transparent 8px);
@@ -298,16 +305,22 @@ body {
   font-size: 1.75rem;
   font-weight: 900;
   text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.1);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  text-align: center;
+  max-width: 100%;
+  overflow: auto;
+  max-height: 100px;
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 
 /* --- Wheel --- */
 .game-area {
+  width: min(clamp(240px, calc(100dvh - 480px), 440px), 100%);
+  flex-shrink: 0;
   position: relative;
   z-index: 10;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
+  max-width: 100%;
 }
 
 /* Arrow indicator */
@@ -328,8 +341,8 @@ body {
 }
 
 .wheel-frame {
-  width: 400px;
-  height: 400px;
+  width: 100%;
+  aspect-ratio: 1;
   border-radius: 50%;
   background: #F8FAFC;
   /* slate-50 */
@@ -344,13 +357,16 @@ body {
 }
 
 .wheel-inner {
-  width: 384px;
-  height: 384px;
+  position: relative;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   background: conic-gradient(#e2e8f0 0deg 360deg);
 }
 
 .wheel-center {
+  font-size: 1.25rem;
+  font-weight: 700;
   position: absolute;
   top: 50%;
   left: 50%;
@@ -390,7 +406,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  margin-bottom: 4rem;
+  margin-bottom: 0;
   /* space from ground */
 }
 
@@ -418,12 +434,14 @@ body {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
+  min-height: 0;
 }
 
 @media (min-width: 900px) {
   .ui-panel {
-    width: 400px;
+    width: clamp(340px, 30vw, 440px);
+    flex-shrink: 0;
   }
 }
 
@@ -432,11 +450,16 @@ body {
   backdrop-filter: blur(12px);
   border-radius: 1.5rem;
   border: 2px solid rgba(255, 255, 255, 0.5);
-  padding: 1.5rem;
+  padding: 1.25rem;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
+
+.items-card { flex: 1; overflow: hidden; }
+.card-header h2 { margin: 0; font-size: 1.15rem; }
+.card-header, .input-group, .panel-footer { flex-shrink: 0; }
 
 .card-header {
   display: flex;
@@ -464,6 +487,7 @@ body {
 .input-field-wrapper {
   position: relative;
   flex: 1;
+  min-width: 0;
 }
 
 .input-icon {
@@ -538,7 +562,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  min-height: 10px;
+  min-height: 0;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
 }
 
 .list-item {
@@ -549,7 +575,14 @@ body {
   justify-content: space-between;
   align-items: center;
   transition: background 0.2s;
+  flex-shrink: 0;
+  min-height: 60px;
+  gap: 0.5rem;
+  padding: 0.5rem;
 }
+
+.item-name { flex: 1; min-width: 0; overflow-wrap: anywhere; user-select: text; line-height: 1.5; }
+.delete-item-btn { width: 40px; height: 40px; flex-shrink: 0; box-shadow: none; }
 
 .list-item:hover {
   background: rgba(255, 255, 255, 0.9);
@@ -560,7 +593,7 @@ body {
   height: 2rem;
   background: #FFEDD5;
   /* orange-100 */
-  color: #EA580C;
+  color: #1E293B;
   /* orange-600 */
   border-radius: 0.5rem;
   display: flex;
@@ -568,7 +601,7 @@ body {
   justify-content: center;
   font-weight: bold;
   font-size: 0.875rem;
-  margin-right: 0.75rem;
+  flex-shrink: 0;
 }
 
 .item-delete-btn {
@@ -590,7 +623,12 @@ body {
   padding-top: 1rem;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
 }
+
+.panel-note { font-size: 0.75rem; line-height: 1.6; color: #526179; margin: 0; }
+.text-btn { flex-shrink: 0; min-height: 40px; }
 
 .text-btn {
   background: transparent;
@@ -613,18 +651,31 @@ body {
 }
 
 /* History Card */
+.history-card { display: block; flex: none; }
+.history-card summary { cursor: pointer; font-weight: 700; padding: 4px 0; }
+.history-card summary svg { margin-right: 0.25rem; }
+.history-count { float: right; font-size: 0.8rem; color: #64748B; line-height: 24px; }
+.history-card[open] .panel-note { margin: 0.75rem 0; }
+.history-card .scroll-list { max-height: min(20dvh, 200px); }
+.history-preview { font-size: 0.8rem; color: #526179; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.restore-label { font-size: 0.8rem; font-weight: 700; color: #6D28D9; flex-shrink: 0; }
+.empty-state { display: grid; gap: 12px; text-align: center; color: #526179; margin: auto; padding: 24px 8px; font-size: 0.875rem; line-height: 1.8; }
+.empty-state strong { color: #6D28D9; font-size: 1.25rem; }
+.empty-history { color: #526179; padding: 12px 0; font-size: 0.8rem; }
+
 .history-entry {
   background: rgba(255, 255, 255, 0.5);
-  padding: 1rem;
+  padding: 0.75rem;
   border-radius: 1rem;
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
   cursor: pointer;
   transition: all 0.2s;
   border: none;
   width: 100%;
   text-align: left;
+  flex-shrink: 0;
 }
 
 .history-entry:hover {
@@ -641,7 +692,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
+
+.stage-header { position: absolute; top: 24px; left: 24px; right: 24px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; z-index: 20; }
+.stage-header h1 { font-size: clamp(1rem, 2vw, 1.4rem); margin: 0 0 6px; }
+.stage-header p { font-size: 0.75rem; margin: 0; color: #526179; }
+.stage-header p.connected { color: #166534; }
+.sound-btn { border: 1px solid #fff; border-radius: 20px; padding: 10px 14px; background: #ffffffbb; color: #334155; cursor: pointer; white-space: nowrap; }
+.stage-hint { font-size: 0.85rem; margin: 16px 0 0; z-index: 10; color: #334155; text-align: center; }
+button, input { font-family: inherit; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:focus-visible, summary:focus-visible { outline: 3px solid #6D28D9; outline-offset: 3px; }
 
 /* Animations */
 @keyframes spin-slow {
@@ -659,16 +721,22 @@ body {
 }
 
 /* Responsive */
-@media (max-width: 900px) {
-  .wheel-frame {
-    width: 300px;
-    height: 300px;
+@media (max-width: 899px) {
+  .app-layout { gap: 1rem; }
+  .game-stage { flex: none; padding-top: 100px; }
+  .stage-header { top: 16px; left: 16px; right: 16px; }
+  .items-card { flex: none; }
+  #itemsList { flex: none; min-height: 220px; max-height: 420px; }
+  .history-card .scroll-list { max-height: 240px; }
+  .game-area {
+    width: min(340px, 70vw);
   }
+  .start-btn { font-size: 1.2rem; padding: 1rem 1.75rem; }
+  .sign-value { font-size: 1.4rem; }
+}
 
-  .wheel-inner {
-    width: 284px;
-    height: 284px;
-  }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
 /* Notification Toast */

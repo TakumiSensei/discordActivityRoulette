@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 
 export interface AnimationOptions {
   duration?: number;
+  elapsedMs?: number;
   onComplete?: () => void;
 }
 
@@ -38,6 +39,12 @@ export class RouletteAnimation {
     return this.state.currentRotation;
   }
 
+  public setRotation(rotation: number) {
+    this.state.currentRotation = rotation;
+    const wheel = this.getWheelElement();
+    if (wheel) wheel.style.transform = `rotate(${rotation}deg)`;
+  }
+
   public start(currentRotation: number, targetRotation: number, options?: AnimationOptions) {
     if (this.state.isAnimating) return;
 
@@ -57,7 +64,7 @@ export class RouletteAnimation {
     this.state.isAnimating = true;
     this.state.startRotation = currentRotation; // Use actual current rotation to stay smooth
     this.state.endRotation = currentRotation + totalRotation;
-    this.state.startTime = Date.now();
+    this.state.startTime = Date.now() - (options?.elapsedMs || 0);
 
     // Start audio
     audioManager.playRoulette();
@@ -86,7 +93,9 @@ export class RouletteAnimation {
     this.state.currentRotation = this.state.startRotation +
       (this.state.endRotation - this.state.startRotation) * ease;
 
-    wheelContainer.style.transform = `rotate(${this.state.currentRotation}deg)`;
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches || progress === 1) {
+      wheelContainer.style.transform = `rotate(${this.state.currentRotation}deg)`;
+    }
 
     if (progress < 1) {
       this.animationFrameId = requestAnimationFrame(this.animate);
@@ -111,6 +120,7 @@ export class RouletteAnimation {
 
     // Fire confetti!
     confetti({
+      disableForReducedMotion: true,
       particleCount: 150,
       spread: 70,
       origin: { y: 0.6 },
