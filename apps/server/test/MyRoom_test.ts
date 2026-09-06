@@ -5,6 +5,7 @@ import { Room } from '@colyseus/core';
 import { Room as ClientRoom } from 'colyseus.js';
 import appConfig from '../src/app.config';
 import { MyRoomState } from '../src/rooms/MyRoom';
+import { drawRoulette } from '../src/utils/rouletteDraw';
 
 process.env.HISTORY_STORE = 'memory';
 
@@ -58,6 +59,9 @@ describe('shared roulette', () => {
     await send(first, 'spin');
     const target = room.state.roulette.targetRotation;
     const result = room.state.roulette.resultItem;
+    // With two items the old center-only implementation could only return these angles.
+    assert.notEqual(target, 90);
+    assert.notEqual(target, 270);
     await send(second, 'add_item', { item: 'Charlie' });
     await send(second, 'remove_item', { item: 'Alice' });
     await send(second, 'clear_items');
@@ -72,12 +76,39 @@ describe('shared roulette', () => {
     await eventually(() => late.state.roulette?.spinId === 1);
     assert.equal(late.state.roulette.resultItem, result);
     assert.equal(late.state.roulette.spinId, 1);
+    await eventually(() => first.state.roulette?.spinId === 1 && second.state.roulette?.spinId === 1);
+    for (const client of [first, second, late]) {
+      assert.equal(client.state.roulette.targetRotation, target);
+      assert.equal(client.state.roulette.resultItem, result);
+    }
     assert.equal(first.state.roulette.resultItem, second.state.roulette.resultItem);
     await new Promise(resolve => setTimeout(resolve, 5100));
     assert.equal(room.state.roulette.isSpinning, false);
     assert.equal(room.state.roulette.resultItem, result);
     await send(second, 'remove_item', { item: 'Alice' });
     assert.deepEqual(Array.from(room.state.roulette.items), ['Bob']);
+  });
+
+  it('sends edge-adjacent stopping angles without rounding for current and late participants', async () => {
+    for (let index = 0; index < 12; index++) {
+      await send(first, 'add_item', { item: `Item ${index}` });
+    }
+    for (const edge of ['start', 'end']) {
+      let calls = 0;
+      const draw = drawRoulette(12, max => calls++ === 0 ? 0 : edge === 'start' ? 0 : max - 1);
+      const roulette = room.state.roulette;
+      roulette.targetRotation = draw.targetRotation;
+      roulette.resultItem = roulette.items[draw.winnerIndex];
+      roulette.spinId++;
+      const late = await server.connectTo(room);
+      await eventually(() => [first, second, late].every(client => client.state.roulette?.spinId === roulette.spinId));
+      for (const client of [first, second, late]) {
+        assert.equal(client.state.roulette.targetRotation, draw.targetRotation);
+        const index = Math.floor((360 - client.state.roulette.targetRotation) / 30);
+        assert.equal(client.state.roulette.items[index], client.state.roulette.resultItem);
+      }
+      await late.leave();
+    }
   });
 
   it('saves a recoverable set before clear and before restoring history', async () => {

@@ -2,7 +2,7 @@ import { JWT } from "@colyseus/auth";
 import { Room, Client } from "@colyseus/core";
 import { Schema, MapSchema, type, ArraySchema } from "@colyseus/schema";
 import { createHistoryStore, type PersistedHistoryEntry } from "../utils/historyStore";
-import { randomInt } from "node:crypto";
+import { drawRoulette } from "../utils/rouletteDraw";
 
 export class Vec2 extends Schema {
   @type("number") x: number;
@@ -24,7 +24,8 @@ export class RouletteHistoryEntry extends Schema {
 export class RouletteState extends Schema {
   @type(["string"]) items = new ArraySchema<string>();
   @type("boolean") isSpinning: boolean = false;
-  @type("number") targetRotation: number = 0; // 目標回転角
+  // 境界付近の停止角度をfloat32へ丸めず、そのまま全員に送る。
+  @type("float64") targetRotation: number = 0;
   @type("number") spinId: number = 0;
   @type("number") spinStartedAt: number = 0;
   @type("string") resultItem: string = "";
@@ -130,10 +131,8 @@ export class MyRoom extends Room<MyRoomState> {
     this.onMessage("spin", (client, message) => {
       if (this.state.roulette.isSpinning || this.state.roulette.items.length === 0) return;
 
-      // 項目ごとに等確率で抽選し、境界を避けて当選セグメントの中央へ止める。
-      const winnerIndex = randomInt(this.state.roulette.items.length);
-      const segmentAngle = 360 / this.state.roulette.items.length;
-      const targetRotation = (360 - (winnerIndex + 0.5) * segmentAngle) % 360;
+      // 当選項目と、その項目内の停止位置をサーバーで一度だけ抽選する。
+      const { winnerIndex, targetRotation } = drawRoulette(this.state.roulette.items.length);
 
       addHistorySnapshot();
 
