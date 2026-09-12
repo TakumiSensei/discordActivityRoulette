@@ -93,9 +93,10 @@ export class RouletteAnimation {
     this.state.currentRotation = this.state.startRotation +
       (this.state.endRotation - this.state.startRotation) * ease;
 
-    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches || progress === 1) {
-      wheelContainer.style.transform = `rotate(${this.state.currentRotation}deg)`;
-    }
+    // The wheel movement is essential draw feedback. Discord can expose different
+    // reduced-motion preferences to participants in the same Activity, so hiding
+    // these frames would make only some participants see the wheel jump at the end.
+    wheelContainer.style.transform = `rotate(${this.state.currentRotation}deg)`;
 
     if (progress < 1) {
       this.animationFrameId = requestAnimationFrame(this.animate);
