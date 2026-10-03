@@ -234,3 +234,7 @@ npm test -w server
 6. 音のON/OFF、設定の再読み込み後の保持、長い当選名、視差効果抑制設定を確認。
 
 状態スキーマを追加しているため、反映時はクライアントとサーバーを合わせてビルド・更新してください。Discord実機の埋め込み表示と音声出力は、公開後に別途確認してください。
+
+## BGM
+Sakura Melody　BGMch
+https://www.youtube.com/watch?v=SnroIUZQ-Ag
